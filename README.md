@@ -3,9 +3,7 @@ title: Argus Bid AI
 emoji: 🛡️
 colorFrom: blue
 colorTo: green
-sdk: streamlit
-sdk_version: 1.36.0
-app_file: tender_audit_platform.py
+sdk: docker
 pinned: false
 ---
 # Sentinel — AI-Driven Tender Auditing & Compliance Platform
