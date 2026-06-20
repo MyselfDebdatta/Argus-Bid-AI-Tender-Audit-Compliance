@@ -19,9 +19,11 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python -c "
+          python - << 'EOF'
           from huggingface_hub import HfApi
           import os
+          print("Starting upload...")
           api = HfApi(token=os.environ['HF_TOKEN'])
-          api.upload_folder(folder_path='.', repo_id='myselfdeb/Argus-Bid-AI', repo_type='space', ignore_patterns=['.git/*', '.github/*'])
-          "
+          api.upload_folder(folder_path='.', repo_id='myselfdeb/Argus-Bid-AI', repo_type='space', ignore_patterns=['.git/**', '.github/**'])
+          print("Upload complete!")
+          EOF
