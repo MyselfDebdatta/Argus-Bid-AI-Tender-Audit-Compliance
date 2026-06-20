@@ -16,4 +16,4 @@ jobs:
       - name: Push to hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push https://myselfdeb:$HF_TOKEN@huggingface.co/spaces/myselfdeb/Argus-Bid-AI main
+        run: git push --force https://myselfdeb:$HF_TOKEN@huggingface.co/spaces/myselfdeb/Argus-Bid-AI main
