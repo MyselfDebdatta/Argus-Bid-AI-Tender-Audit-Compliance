@@ -13,4 +13,4 @@ COPY . .
 EXPOSE 7860
 
 # Run the Streamlit app
-CMD ["streamlit", "run", "tender_audit_platform.py", "--server.port", "7860", "--server.address", "0.0.0.0"]
+CMD ["streamlit", "run", "tender_audit_platform.py", "--server.port", "7860", "--server.address", "0.0.0.0", "--server.enableCORS", "false", "--server.enableXsrfProtection", "false"]
