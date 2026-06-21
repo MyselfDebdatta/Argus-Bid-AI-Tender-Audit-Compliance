@@ -2979,8 +2979,36 @@ def render_landing_page() -> None:
             display: none !important;
             flex-direction: column;
             width: 100%;
-            gap: 12px !important;
+            gap: 0 !important;
             margin-top: 16px;
+            background: #0B1120;
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 8px 0;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }}
+        .nav-links a {{
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 14px 24px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #94A3B8 !important;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            text-decoration: none;
+            transition: background 0.2s;
+        }}
+        .nav-links a:hover {{
+            background: rgba(255,255,255,0.03);
+            color: #F1F5F9 !important;
+        }}
+        .nav-links a svg {{
+            display: block !important;
+            width: 18px;
+            height: 18px;
+            color: #64748B;
         }}
         #mobile-menu-toggle:checked ~ .nav-links {{
             display: flex !important;
@@ -3030,16 +3058,18 @@ def render_landing_page() -> None:
             <label for="mobile-menu-toggle" class="mobile-menu-icon" style="display: none; color: #94A3B8; font-size: 28px; cursor: pointer; user-select: none;">&#9776;</label>
         </div>
         <input type="checkbox" id="mobile-menu-toggle" style="display: none;">
-        <div class="nav-links" style="gap: 16px; font-size: 13.5px;">
-            <a href="#sec-01" target="_self">Problem</a>
-            <a href="#sec-02" target="_self">Solution</a>
-            <a href="#sec-03" target="_self">Features</a>
-            <a href="#sec-04" target="_self">Modules</a>
-            <a href="#sec-05" target="_self">Pipeline</a>
-            <a href="#sec-06" target="_self">Enterprise</a>
-            <a href="#sec-08" target="_self">Security</a>
-            <a href="#sec-09" target="_self">Deploy</a>
-            <a href="#sec-10" target="_self">Vision</a>
+        <div class="nav-links" style="display: flex; align-items: center; gap: 16px; font-size: 13.5px; flex-wrap: wrap;">
+            <a href="#" target="_self" onclick="document.getElementById('mobile-menu-toggle').checked=false" style="text-decoration: none; color: inherit; display: flex; align-items: center;"><svg style="display: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>Home</a>
+            <a href="#sec-01" target="_self" onclick="document.getElementById('mobile-menu-toggle').checked=false" style="text-decoration: none; color: inherit; display: flex; align-items: center;"><svg style="display: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>Problem</a>
+            <a href="#sec-02" target="_self" onclick="document.getElementById('mobile-menu-toggle').checked=false" style="text-decoration: none; color: inherit; display: flex; align-items: center;"><svg style="display: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>Solution</a>
+            <a href="#sec-03" target="_self" onclick="document.getElementById('mobile-menu-toggle').checked=false" style="text-decoration: none; color: inherit; display: flex; align-items: center;"><svg style="display: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>Features</a>
+            <a href="#sec-04" target="_self" onclick="document.getElementById('mobile-menu-toggle').checked=false" style="text-decoration: none; color: inherit; display: flex; align-items: center;"><svg style="display: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>Modules</a>
+            <a href="#sec-05" target="_self" onclick="document.getElementById('mobile-menu-toggle').checked=false" style="text-decoration: none; color: inherit; display: flex; align-items: center;"><svg style="display: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>Pipeline</a>
+            <a href="#sec-06" target="_self" onclick="document.getElementById('mobile-menu-toggle').checked=false" style="text-decoration: none; color: inherit; display: flex; align-items: center;"><svg style="display: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>Enterprise</a>
+            <a href="#sec-08" target="_self" onclick="document.getElementById('mobile-menu-toggle').checked=false" style="text-decoration: none; color: inherit; display: flex; align-items: center;"><svg style="display: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>Security</a>
+            <a href="#sec-09" target="_self" onclick="document.getElementById('mobile-menu-toggle').checked=false" style="text-decoration: none; color: inherit; display: flex; align-items: center;"><svg style="display: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 16.9A5 5 0 0 0 18 7h-1.26a8 8 0 1 0-11.62 9"></path><polyline points="13 11 9 17 15 17 11 23"></polyline></svg>Deploy</a>
+            <a href="#sec-10" target="_self" onclick="document.getElementById('mobile-menu-toggle').checked=false" style="text-decoration: none; color: inherit; display: flex; align-items: center;"><svg style="display: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>Vision</a>
+            <a href="#contact" target="_self" onclick="document.getElementById('mobile-menu-toggle').checked=false" style="text-decoration: none; color: inherit; display: flex; align-items: center;"><svg style="display: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>Contact</a>
         </div>
     </div>
 
