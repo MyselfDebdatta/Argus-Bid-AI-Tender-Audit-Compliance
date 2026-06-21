@@ -1696,14 +1696,6 @@ html, body, [class*="css"]  { font-family:'Inter',system-ui,sans-serif; }
 .invtable { width:100%; border-collapse:collapse; font-size:13px; }
 .invtable td { padding:9px 10px; border-bottom:1px solid var(--line); }
 .invtable td:first-child { font-family:'JetBrains Mono',monospace; font-size:12px; color:#C7D3EA; }
-
-@media (max-width: 600px) {
-    .invtable, .matrix {
-        display: block;
-        overflow-x: auto;
-        white-space: nowrap;
-    }
-}
 .sh-box {
     display: flex; align-items: center; width: 100%; margin: 36px 0 16px 0;
 }
@@ -3803,7 +3795,7 @@ def render_inventory(r: VendorResult) -> str:
         f"<td>{html.escape(i.doc_type)}</td>"
         f"<td style='text-align:right;'>{read_pill(i.readability)}</td></tr>"
         for i in r.inventory)
-    out += f'<table class="invtable">{rows}</table>'
+    out += f'<div style="overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch;"><table class="invtable">{rows}</table></div>'
     return out
 
 
@@ -3828,7 +3820,7 @@ def render_pqc(r: VendorResult) -> str:
                     f"<span style='color:var(--muted);font-size:11px;'>§{p.section}</span></td>"
                     f"<td><span class='chip req'>{html.escape(p.required)}</span></td>"
                     f"<td style='text-align:right;'>{chip}</td></tr>")
-    out += f'<table class="matrix"><thead><tr><th>Criterion</th><th>Required</th><th style="text-align:right;">Vendor Provided</th></tr></thead><tbody>{"".join(rows)}</tbody></table>'
+    out += f'<div style="overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch;"><table class="matrix"><thead><tr><th>Criterion</th><th>Required</th><th style="text-align:right;">Vendor Provided</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
     return out
 
 
@@ -3844,7 +3836,7 @@ def render_matrix(r: VendorResult) -> str:
                 f"<td>{tier_chip}</td>"
                 f"<td><span class='chip req'>{html.escape(s.required)}</span></td>"
                 f"<td style='text-align:right;'>{spec_chip(s)}</td></tr>")
-    out += f'<table class="matrix"><thead><tr><th>Parameter</th><th>Tier</th><th>BID Requirement</th><th style="text-align:right;">Vendor Value</th></tr></thead><tbody>{"".join(rows)}</tbody></table>'
+    out += f'<div style="overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch;"><table class="matrix"><thead><tr><th>Parameter</th><th>Tier</th><th>BID Requirement</th><th style="text-align:right;">Vendor Value</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
     return out
 
 
