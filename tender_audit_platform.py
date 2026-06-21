@@ -2984,7 +2984,10 @@ def render_landing_page() -> None:
             grid-template-columns: 1fr !important;
         }}
         .hero-right {{
-            display: none !important;
+            display: flex !important;
+            margin-top: 20px;
+            transform: scale(0.75);
+            transform-origin: center;
         }}
         .cta-row {{
             flex-direction: column !important;
