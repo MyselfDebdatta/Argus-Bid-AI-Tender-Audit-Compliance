@@ -1,6 +1,6 @@
 <div align="center">
 
-# <img src="logo.jpg" alt="Argus Bid AI Logo" width="40" style="vertical-align: middle; margin-right: 10px; border-radius: 8px;"> Argus Bid AI — Tender Audit & Compliance
+# <img src="logo.jpg" alt="Argus Bid AI Logo" width="40" style="vertical-align: -8px; margin-right: 10px; border-radius: 8px;"> Argus Bid AI — Tender Audit & Compliance
 
 **A production-grade, deterministic AI-driven tender auditing and compliance platform for PSUs.**
 
