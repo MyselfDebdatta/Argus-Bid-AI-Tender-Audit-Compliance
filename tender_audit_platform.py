@@ -113,14 +113,14 @@ def inject_custom_loading_screen():
                     }}
                 }};
                 
-                // Smart dismiss: Wait until Streamlit has rendered actual Python components
+                // Smart dismiss: Wait until Streamlit has rendered actual visible text components
                 let checkCount = 0;
                 const checkReady = setInterval(() => {{
-                    const elements = document.querySelectorAll('.element-container');
-                    // We check if at least 3 elements are rendered to ensure the UI is fully painted
-                    if ((elements && elements.length > 3) || checkCount > 60) {{
+                    // Wait for paragraphs or headings to appear, ensuring real UI is painted (ignores hidden CSS blocks)
+                    const visibleText = document.querySelectorAll('[data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] h1, [data-testid="stMarkdownContainer"] h2, [data-testid="stMarkdownContainer"] h3');
+                    if ((visibleText && visibleText.length > 0) || checkCount > 60) {{
                         clearInterval(checkReady);
-                        setTimeout(removeLoader, 300); // Tiny delay to let browser paint
+                        setTimeout(removeLoader, 300); // Tiny delay to let browser finish paint
                     }}
                     checkCount++;
                 }}, 250);
