@@ -1696,6 +1696,14 @@ html, body, [class*="css"]  { font-family:'Inter',system-ui,sans-serif; }
 .invtable { width:100%; border-collapse:collapse; font-size:13px; }
 .invtable td { padding:9px 10px; border-bottom:1px solid var(--line); }
 .invtable td:first-child { font-family:'JetBrains Mono',monospace; font-size:12px; color:#C7D3EA; }
+
+@media (max-width: 600px) {
+    .invtable, .matrix {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+}
 .sh-box {
     display: flex; align-items: center; width: 100%; margin: 36px 0 16px 0;
 }
