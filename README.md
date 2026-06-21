@@ -19,6 +19,22 @@
 
 **Argus Bid AI** is a highly auditable and visually spectacular AI-driven Tender Auditing & Compliance Platform. Built specifically for Public Sector Undertakings (PSUs) like IOCL, it automates the tedious, manual process of validating vendor submissions against complex Master BID/NIT (Notice Inviting Tender) documents. It ensures rapid, bias-free evaluations while maintaining strict legal defensibility through deterministic rule-engines.
 
+---
+
+## 🏢 Academic & Industrial Context
+
+<div align="center">
+  <img src="https://upload.wikimedia.org/wikipedia/en/thumb/5/58/Indian_Oil_Logo.svg/200px-Indian_Oil_Logo.svg.png" alt="Indian Oil Corporation Limited Logo" width="80" style="margin-top: 10px; margin-bottom: 15px;">
+</div>
+
+This platform was engineered as part of a **Software Engineering (SWE) Summer Internship** at **Indian Oil Corporation Limited (IOCL), Haldia Refinery** during my first year, second semester (June 15th, 2026 – July 13th, 2026).
+
+**Role & Authorship:** I am the **sole developer and exclusive contributor** to this project. I independently engineered the entire platform from scratch, encompassing all core architecture, frontend design, and backend logic.
+
+The architectural design, project structure, and enterprise compliance standards were developed under the expert guidance and explicit instructions of my supervisors in the **Information Systems (IS) Department** at IOCL, Haldia Refinery. Their mentorship was instrumental in ensuring the tool meets the rigorous demands of public sector procurement.
+
+---
+
 ## 🎯 Executive Overview
 
 ### 🚨 The Problem
