@@ -27,7 +27,8 @@
   <img src="iocl_logo.png" alt="Indian Oil Corporation Limited Logo" width="180" style="margin-top: 10px; margin-bottom: 20px;">
 </div>
 
-This platform was engineered as part of a **Software Engineering (SWE) Summer Internship** at **Indian Oil Corporation Limited (IOCL), Haldia Refinery** during my first year, second semester (June 15th, 2026 – July 13th, 2026).
+> [!NOTE]
+> This platform was engineered as part of a **Software Engineering (SWE) Summer Internship** at **Indian Oil Corporation Limited (IOCL), Haldia Refinery** during my first year, second semester (June 15th, 2026 – July 13th, 2026).
 
 > [!IMPORTANT]
 > 👤 **Role & Authorship:** I am the **sole developer and exclusive contributor** to this project. I independently engineered the entire platform from scratch, encompassing all core architecture, frontend design, and backend logic.
