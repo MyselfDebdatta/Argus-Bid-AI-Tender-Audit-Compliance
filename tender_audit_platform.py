@@ -2320,7 +2320,7 @@ margin-bottom: 24px; position: relative; overflow: hidden; display: flex; flex-d
             filter: drop-shadow(0 0 5px rgba(255,255,255,0.6));
         }
         </style>""", unsafe_allow_html=True)
-        bid_spinner_placeholder = st.empty()
+        bid_spinner_placeholder = st.session_state.get("global_spinner", st.empty())
 
         if ss.bid_files:
             with st.container(border=True):
@@ -2484,7 +2484,7 @@ margin-bottom: 24px; position: relative; overflow: hidden; display: flex; flex-d
                                       accept_multiple_files=True)
             st.markdown('<div class="add-vendor-marker"></div>', unsafe_allow_html=True)
             add = st.form_submit_button("Add / Update Vendor", use_container_width=True)
-        vendor_spinner_placeholder = st.empty()
+        vendor_spinner_placeholder = st.session_state.get("global_spinner", st.empty())
 
         if ss.vendor_files:
             with st.container(border=True):
@@ -4196,6 +4196,7 @@ def main() -> None:
             st.error(f"Error loading {filename}: {e}")
         return
 
+    st.session_state.global_spinner = st.empty()
     api_key, model, run_clicked = render_sidebar()
 
     render_masthead()
