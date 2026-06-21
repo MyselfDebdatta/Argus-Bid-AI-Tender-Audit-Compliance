@@ -178,13 +178,11 @@ a:hover{text-decoration:underline;}
 /* outcome summary */
 .summary{margin:36px 0 10px;}
 .summary h2{font-size:20px;font-weight:800;letter-spacing:-.4px;margin:0 0 10px;}
-.table-wrapper{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin:16px 0;border-radius:8px;border:1px solid var(--line);}
-.sumtable{width:100%;border-collapse:collapse;background:var(--panel);overflow:hidden;white-space:nowrap;}
+.sumtable{width:100%;border-collapse:collapse;margin:16px 0;}
 .sumtable th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.6px;padding:12px 16px;font-weight:600;border-bottom:1px solid var(--line);background:rgba(15,23,42,0.4);}
-.sumtable td{border-bottom:1px solid var(--line);padding:14px 16px;font-size:14px;background:transparent;}
-.sumtable tr:last-child td{border-bottom:none;}
-.sumtable tr td:first-child{font-weight:700;border-left:none;}
-.sumtable tr td:last-child{border-right:none;}
+.sumtable td{border-bottom:1px solid var(--line);padding:14px 16px;font-size:14px;background:var(--panel);}
+.sumtable tr:last-child td{border-bottom:1px solid var(--line);}
+.sumtable tr td:first-child{font-weight:700;}
 .sumtable tr{transition:background .2s;}
 .sumtable tr:hover td{background:rgba(59,130,246,.05);}
 .sumtable tr.dq td{background:rgba(239,68,68,.06);}
@@ -217,6 +215,7 @@ footer .row{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;}
   .context{grid-template-columns:1fr;}
   .cs-head{flex-direction:column;gap:12px;}
   .pagehead h1{font-size:clamp(36px,8vw,48px) !important;}
+  .sumtable{display:block;overflow-x:auto;white-space:nowrap;}
 }
 </style>
 </head>
@@ -389,7 +388,6 @@ features the leader met 4 vs 2 — the 30% preferred weighting separates them.</
   <!-- OUTCOME -->
   <section class="summary">
     <h2>The tender at a glance</h2>
-    <div class="table-wrapper">
     <table class="sumtable">
       <thead><tr><th>Vendor archetype</th><th>Status</th><th>Score</th><th>Deciding factor</th></tr></thead>
       <tbody>
@@ -398,7 +396,6 @@ features the leader met 4 vs 2 — the 30% preferred weighting separates them.</
         <tr class="dq"><td>Incomplete bidder</td><td><span class="badge-glow bg-bad"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> Disqualified</span></td><td>&mdash;</td><td>Missing MAF + documents; failed pre-qualification.</td></tr>
       </tbody>
     </table>
-    </div>
     <p style="color:var(--muted);font-size:13.5px;margin-top:14px;">Across the three, the pattern is the
     point: identical rules applied to every vendor, eligibility settled before merit, and a written reason
     behind every line. Run the same corpus yourself on the live audit page and you will get these numbers
