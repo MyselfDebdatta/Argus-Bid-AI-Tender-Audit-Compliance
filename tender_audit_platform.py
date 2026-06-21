@@ -2100,10 +2100,11 @@ margin-bottom: 24px; position: relative; overflow: hidden; display: flex; flex-d
 </div>
 </div>
     """, unsafe_allow_html=True)
-        st.html("""
+        import streamlit.components.v1 as components
+        components.html("""
         <script>
         setInterval(() => {
-            const el = document.getElementById("sys-clock");
+            const el = window.parent.document.getElementById("sys-clock");
             if (el) {
                 const d = new Date();
                 const pad = (n) => n.toString().padStart(2, '0');
@@ -2113,7 +2114,7 @@ margin-bottom: 24px; position: relative; overflow: hidden; display: flex; flex-d
             }
         }, 1000);
         </script>
-        """, unsafe_allow_javascript=True)
+        """, height=0, width=0)
         st.markdown(f"""
         <div class="demo-btn-marker"></div>
         <style>
@@ -3440,14 +3441,15 @@ We then parse every vendor's submission, intelligently classifying documents, ex
 </div>
     """, unsafe_allow_html=True)
 
-    st.html("""
+    import streamlit.components.v1 as components
+    components.html("""
     <script>
-    const scrollContainer = document.querySelector('.main') || document.querySelector('[data-testid="stAppViewContainer"]') || window;
-    const navLinks = document.querySelectorAll('.landing-navbar .nav-links a');
+    const scrollContainer = window.parent.document.querySelector('.main') || window.parent.document.querySelector('[data-testid="stAppViewContainer"]') || window.parent;
+    const navLinks = window.parent.document.querySelectorAll('.landing-navbar .nav-links a');
     
     function updateActive() {
         let current = "";
-        const sections = document.querySelectorAll('.lp-eyebrow');
+        const sections = window.parent.document.querySelectorAll('.lp-eyebrow');
         if(sections.length === 0) return;
         
         sections.forEach(function(section) {
@@ -3468,11 +3470,11 @@ We then parse every vendor's submission, intelligently classifying documents, ex
     }
     
     scrollContainer.addEventListener('scroll', updateActive);
-    window.addEventListener('scroll', updateActive);
+    window.parent.addEventListener('scroll', updateActive);
     // Trigger once on load
     setTimeout(updateActive, 500);
     </script>
-    """, unsafe_allow_javascript=True)
+    """, height=0, width=0)
 
 
 # ---------------------------------------------------------------------------
@@ -4024,8 +4026,9 @@ def main() -> None:
     with c2:
         st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
         if st.button("⎘ Export Report", type="primary", use_container_width=True):
+            import streamlit.components.v1 as components
             import time
-            st.html(f"<script>setTimeout(function() {{ window.print(); }}, 500);</script><!--{time.time()}-->", unsafe_allow_javascript=True)
+            components.html(f"<script>setTimeout(function() {{ window.parent.print(); }}, 500);</script><!--{time.time()}-->", height=0, width=0)
 
     render_kpis(ss.results)
     render_bid_map()
