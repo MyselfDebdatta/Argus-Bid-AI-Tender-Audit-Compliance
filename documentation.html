@@ -375,9 +375,8 @@ score          = mandatory_part + preferred_part   <span class="c"># disqualifie
     <p>Every compliance verdict is produced by a rule-based engine. The same inputs always yield the same
     verdict, and each verdict carries the bid section and evidence behind it. That reproducibility is what
     survives an audit or a vendor challenge.</p></div>
-    <div class="card tip"><h4>The Local AI layer (Ollama)</h4>
-    <p>A locally-hosted language-model layer (Llama 3) handles semantic extraction, re-classifies documents the rules could
-    not confidently type, and writes the executive narrative summary. It runs entirely on your local machine, ensuring 100% data privacy. It never overrides a deterministic verdict.</p></div>
+    <div class="card tip"><h4>The Hybrid AI layer (Ollama & Groq)</h4>
+    <p>A sophisticated RAG language-model layer (Llama 3) handles semantic extraction of the Master BID, re-classifies ambiguous vendor documents, and writes the executive narrative summary. It runs entirely on your local machine via Ollama for 100% data privacy, or accelerates via the Groq cloud when deployed. It never overrides a deterministic verdict.</p></div>
 
     <h2 id="upload"><span class="num">05</span>Uploading documents</h2>
     <p>Supported formats are <code class="inl">.pdf</code>, <code class="inl">.txt</code>, and
@@ -395,7 +394,7 @@ score          = mandatory_part + preferred_part   <span class="c"># disqualifie
     <h3>Streamlit application</h3>
     <pre><span class="k">pip install</span> -r requirements.txt
 <span class="k">streamlit run</span> tender_audit_platform.py</pre>
-    <p>Then use the sidebar to load the demo or upload your own documents. Ensure Ollama is running locally with the <code>llama3</code> model downloaded.</p>
+    <p>Then use the sidebar to load the demo or upload your own documents. Ensure Ollama is running locally with the <code>llama3</code> model downloaded, or set the <code>GROQ_API_KEY</code> environment variable to use the cloud fallback.</p>
     <h3>Showcase website</h3>
     <p>The static Argus Bid AI showcase runs the full demo audit in the browser
     with no install — open it directly. It is the page to show people; the Streamlit app is the one that

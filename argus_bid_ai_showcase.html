@@ -371,12 +371,12 @@ footer .row{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;}
     <div class="arch">
       <div class="card col det"><h5>The rules decide &mdash; always</h5>
         <p>Every compliance verdict is produced by a deterministic engine. The same inputs always yield the same verdict, and each one carries the bid section and the evidence text behind it. That reproducibility is what survives an audit or a vendor challenge.</p></div>
-      <div class="card col llm"><h5>The AI only assists &mdash; optionally</h5>
-        <p>An optional language-model layer re-classifies documents the rules couldn't confidently type and writes the executive narrative. It never overrides a verdict, and if it's switched off or unavailable, the audit runs identically on rules alone.</p></div>
+      <div class="card col llm"><h5>The AI only assists &mdash; via Hybrid RAG</h5>
+        <p>A hybrid RAG language-model layer (Ollama/Groq) extracts requirements, re-classifies documents the rules couldn't confidently type and writes the executive narrative. It never overrides a verdict, and if it's unavailable, the audit runs identically on rules alone.</p></div>
     </div>
     <p class="note">This page is a self-contained showcase: the full audit logic runs in your browser on a built-in demo corpus
       (IOCL NIT <code class="inl">IOCL/HR/IT/2026/NW-4471</code> + three vendor submissions), so the numbers you see are computed live,
-      not pre-printed. The companion Streamlit application accepts real PDF uploads and the optional model key &mdash; run it with
+      not pre-printed. The companion Streamlit application accepts real PDF uploads and integrates with Ollama or Groq &mdash; run it with
       <code class="inl">streamlit run tender_audit_platform.py</code>.</p>
   </section>
 </main>
