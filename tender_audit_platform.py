@@ -757,12 +757,10 @@ class RAGAuditEngine(AuditEngine):
         self.vectorstores = {}
         self.text_splitter = None
         
+        import os
+        
+        # 1. Initialize the LLM Engine (Fast, cloud-based or local)
         try:
-            import os
-            from langchain_community.embeddings import HuggingFaceEmbeddings
-            from langchain_chroma import Chroma
-            from langchain_text_splitters import RecursiveCharacterTextSplitter
-            
             groq_key = os.environ.get("GROQ_API_KEY")
             if not groq_key:
                 try:
@@ -781,12 +779,20 @@ class RAGAuditEngine(AuditEngine):
                 # No API key found: fallback to completely local, air-gapped Ollama model
                 from langchain_community.llms import Ollama
                 self.llm = Ollama(model=self.model_name, temperature=0.0)
-
+        except ImportError:
+            pass
+            
+        # 2. Initialize the Vector Store (Heavy, might be missing on Render)
+        try:
+            from langchain_community.embeddings import HuggingFaceEmbeddings
+            from langchain_chroma import Chroma
+            from langchain_text_splitters import RecursiveCharacterTextSplitter
+            
             self.embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
             self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
             self.Chroma = Chroma
         except ImportError:
-            pass # Gracefully degrade if Langchain is not installed
+            pass # Gracefully degrade if heavy vector packages are not installed
 
     def _create_vectorstore(self, text: str, store_id: str):
         if not getattr(self, "embeddings", None) or not getattr(self, "Chroma", None): return None
