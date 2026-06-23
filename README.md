@@ -49,18 +49,21 @@ Argus Bid AI transforms procurement from a manual chore into an instant, determi
 ### ✨ Tech Innovations
 - **Deterministic Rule Engine:** Unlike generative AI that hallucinate, Argus Bid AI relies on strict logic to evaluate pass/fail compliance.
 - **Explainable Audit Trails (XAI):** Every single decision, rank, or disqualification is backed by a legally defensible, traceable text snippet.
-- **Hybrid RAG Augmentation (Ollama + Groq):** Employs an ultra-secure local Ollama Llama 3 engine for air-gapped processing, alongside an optional Groq cloud fallback for blazing-fast public deployments.
+- **Dual-Model Hybrid RAG Augmentation:** Employs an ultra-secure local Ollama engine for air-gapped processing, alongside a lightning-fast Groq cloud fallback leveraging a dual-model architecture (`70B` and `8B` models) to balance intelligence and rate limits.
 - **Dynamic Multi-modal OCR:** Extracts text and tables effortlessly.
 
 ### 🧩 Core Product Modules
 - **Compliance Engine:** Evaluates PQC, MAFs, and Mandatory Documents based on extracted constraints.
 - **Comparative Matrix:** Automatically generates side-by-side technical comparison tables for all responsive bidders.
 - **Interactive Dashboard:** A premium, glassmorphic UI for uploading documents, running audits, and viewing explainable results.
+- **Double-Confirm Verifiability:** A built-in "Human-in-the-Loop" modal allowing auditors to physically inspect the exact PDF snippets used by the AI to make a compliance decision.
 - **Exportable Reports:** Instantly export the entire dashboard analysis as a physical or PDF report for stakeholder review.
 
-### 🤖 Hybrid RAG Engine (Llama 3)
+### 🤖 Dual-Model Hybrid RAG Engine
 
-The AI augmentation in Argus Bid AI is designed with a state-of-the-art hybrid architecture. It operates fully locally on your machine via **Ollama** to ensure strict compliance with public sector data privacy standards. However, when deployed to a cloud platform like Render, it intelligently falls back to the **Groq API** to process RAG extractions at lightning speed without needing a heavy cloud GPU.
+The AI augmentation in Argus Bid AI is designed with a state-of-the-art dual-model architecture. It operates fully locally on your machine via **Ollama** to ensure strict compliance with public sector data privacy standards. However, when deployed to a cloud platform like Render, it intelligently routes tasks between two models via the **Groq API**:
+- **The "Smart" Engine (`llama-3.3-70b-versatile`):** Dedicated exclusively to the highly complex, one-off task of parsing the Master BID JSON ontology.
+- **The "Fast" Engine (`llama-3.1-8b-instant`):** Dedicated to high-throughput, repetitive tasks like document classification and vendor evaluation to ensure massive speed while bypassing strict API rate limits.
 
 The platform uses a sophisticated Retrieval-Augmented Generation (RAG) pipeline powered by LangChain and ChromaDB to do three key things:
 

@@ -263,6 +263,7 @@ footer .row{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;}
       <a href="#scoring" class="sub" target="_self">Scoring model</a>
       <a href="#xai" class="sub" target="_self">Explainable ranking</a>
       <a href="#architecture" target="_self">Architecture</a>
+      <a href="#verifiability" target="_self">Verifiability</a>
       <a href="#upload" target="_self">Uploading documents</a>
       <a href="#running" target="_self">Running the app</a>
       <a href="#reference" target="_self">Status reference</a>
@@ -375,10 +376,13 @@ score          = mandatory_part + preferred_part   <span class="c"># disqualifie
     <p>Every compliance verdict is produced by a rule-based engine. The same inputs always yield the same
     verdict, and each verdict carries the bid section and evidence behind it. That reproducibility is what
     survives an audit or a vendor challenge.</p></div>
-    <div class="card tip"><h4>The Hybrid AI layer (Ollama & Groq)</h4>
-    <p>A sophisticated RAG language-model layer (Llama 3) handles semantic extraction of the Master BID, re-classifies ambiguous vendor documents, and writes the executive narrative summary. It runs entirely on your local machine via Ollama for 100% data privacy, or accelerates via the Groq cloud when deployed. It never overrides a deterministic verdict.</p></div>
+    <div class="card tip"><h4>The Dual-Model Hybrid AI Engine</h4>
+    <p>A sophisticated Dual-Model RAG language-model layer handles semantic tasks. The "Smart" 70B model dynamically extracts the complex Master BID ontology, while the "Fast" 8B model handles high-throughput tasks like re-classifying ambiguous vendor documents and writing the executive narrative. It runs locally via Ollama or accelerates via the Groq cloud. It never overrides a deterministic verdict.</p></div>
 
-    <h2 id="upload"><span class="num">05</span>Uploading documents</h2>
+    <h2 id="verifiability"><span class="num">05</span>Human-in-the-Loop Verifiability</h2>
+    <p>Argus Bid AI features a built-in <b>Double-Confirm Source</b> modal. Instead of blindly trusting the AI, auditors can click "Inspect" on any MAF or low-quality document to view the exact PDF snippet and page rendering the model used to make its compliance decision. This ensures 100% audit transparency.</p>
+
+    <h2 id="upload"><span class="num">06</span>Uploading documents</h2>
     <p>Supported formats are <code class="inl">.pdf</code>, <code class="inl">.txt</code>, and
     <code class="inl">.md</code>. For each vendor, give a name and attach all of their files together.
     For the cleanest extraction:</p>
@@ -389,7 +393,7 @@ score          = mandatory_part + preferred_part   <span class="c"># disqualifie
         but a human should verify it — the grade is a flag, not a rejection.</li>
     </ul>
 
-    <h2 id="running"><span class="num">06</span>Running the app</h2>
+    <h2 id="running"><span class="num">07</span>Running the app</h2>
     <p>The platform ships in two forms that share the same engine and the same verdicts.</p>
     <h3>Streamlit application</h3>
     <pre><span class="k">pip install</span> -r requirements.txt
@@ -400,7 +404,7 @@ score          = mandatory_part + preferred_part   <span class="c"># disqualifie
     with no install — open it directly. It is the page to show people; the Streamlit app is the one that
     processes live uploads.</p>
 
-    <h2 id="reference"><span class="num">07</span>Status reference</h2>
+    <h2 id="reference"><span class="num">08</span>Status reference</h2>
     <table class="ref">
       <thead><tr><th>Token</th><th>Where it appears</th><th>Meaning</th></tr></thead>
       <tbody>

@@ -364,15 +364,15 @@ footer .row{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;}
         <p>Identify each vendor file by content, not filename &mdash; <code class="inl">Scan_001.pdf</code> becomes a typed, readability-graded document.</p></div>
       <div class="step"><div class="sn">step 3</div><h5>Run the gates</h5>
         <p>A missing or invalid MAF, a failed pre-qualification, or a missing mandatory document disqualifies a vendor outright, with the reason logged.</p></div>
-      <div class="step"><div class="sn">step 4</div><h5>Score &amp; explain</h5>
-        <p>Survivors earn 70% on mandatory specs and 30% on preferred features, then a plain-language note explains the ranking.</p></div>
+      <div class="step"><div class="sn">step 4</div><h5>Score, explain &amp; verify</h5>
+        <p>Survivors earn 70% on mandatory specs and 30% on preferred features. A plain-language note explains the ranking, and auditors can use the "Double-Confirm" UI to inspect exact PDF snippets.</p></div>
     </div>
 
     <div class="arch">
       <div class="card col det"><h5>The rules decide &mdash; always</h5>
         <p>Every compliance verdict is produced by a deterministic engine. The same inputs always yield the same verdict, and each one carries the bid section and the evidence text behind it. That reproducibility is what survives an audit or a vendor challenge.</p></div>
-      <div class="card col llm"><h5>The AI only assists &mdash; via Hybrid RAG</h5>
-        <p>A hybrid RAG language-model layer (Ollama/Groq) extracts requirements, re-classifies documents the rules couldn't confidently type and writes the executive narrative. It never overrides a verdict, and if it's unavailable, the audit runs identically on rules alone.</p></div>
+      <div class="card col llm"><h5>The AI only assists &mdash; via Dual-Model RAG</h5>
+        <p>A Dual-Model Hybrid RAG language-model layer (70B for deep extraction, 8B for rapid classification via Ollama/Groq) extracts requirements, re-classifies documents, and writes the narrative. It never overrides a verdict.</p></div>
     </div>
     <p class="note">This page is a self-contained showcase: the full audit logic runs in your browser on a built-in demo corpus
       (IOCL NIT <code class="inl">IOCL/HR/IT/2026/NW-4471</code> + three vendor submissions), so the numbers you see are computed live,
@@ -383,7 +383,7 @@ footer .row{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;}
 
 <footer><div class="wrap row">
   <div>Argus Bid AI &mdash; AI-Driven Tender Auditing &amp; Compliance &middot; built for IOCL procurement evaluation.</div>
-  <div>Deterministic verdicts &middot; explainable ranking &middot; auditable trail.</div>
+  <div>Deterministic verdicts &middot; explainable ranking &middot; double-confirm verifiability.</div>
 </div></footer>
 
 <script>
