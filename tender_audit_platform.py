@@ -755,7 +755,7 @@ class RAGAuditEngine(AuditEngine):
             import os
             from langchain_community.embeddings import HuggingFaceEmbeddings
             from langchain_chroma import Chroma
-            from langchain.text_splitter import RecursiveCharacterTextSplitter
+            from langchain_text_splitters import RecursiveCharacterTextSplitter
             
             # Check if running in Render's cloud environment
             is_render = os.environ.get("RENDER") is not None
