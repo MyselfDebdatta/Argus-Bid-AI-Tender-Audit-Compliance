@@ -763,19 +763,22 @@ class RAGAuditEngine(AuditEngine):
             from langchain_chroma import Chroma
             from langchain_text_splitters import RecursiveCharacterTextSplitter
             
-            # Check if running in Render's cloud environment
-            is_render = os.environ.get("RENDER") is not None
+            groq_key = os.environ.get("GROQ_API_KEY")
+            if not groq_key:
+                try:
+                    groq_key = st.secrets.get("GROQ_API_KEY")
+                except Exception:
+                    pass
             
-            if is_render:
-                # Deployed on Render: use Groq API 
-                groq_key = os.environ.get("GROQ_API_KEY")
+            if groq_key:
                 try:
                     from langchain_groq import ChatGroq
                     self.llm = ChatGroq(model_name="llama3-70b-8192", groq_api_key=groq_key, temperature=0.0)
                 except ImportError:
-                    pass
+                    from langchain_community.llms import Ollama
+                    self.llm = Ollama(model=self.model_name, temperature=0.0)
             else:
-                # Running locally: force local Ollama model
+                # No API key found: fallback to completely local, air-gapped Ollama model
                 from langchain_community.llms import Ollama
                 self.llm = Ollama(model=self.model_name, temperature=0.0)
 
