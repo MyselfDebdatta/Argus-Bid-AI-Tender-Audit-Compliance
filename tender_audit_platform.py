@@ -816,6 +816,24 @@ class RAGAuditEngine(AuditEngine):
         self.vectorstores[store_id] = vectorstore
         return vectorstore
 
+    def _extract_json(self, text: str) -> dict:
+        """Robustly extracts the first complete JSON object from text, ignoring extra data."""
+        start = text.find('{')
+        if start == -1:
+            raise ValueError("No JSON object found")
+        stack = 0
+        end = -1
+        for i in range(start, len(text)):
+            if text[i] == '{': stack += 1
+            elif text[i] == '}':
+                stack -= 1
+                if stack == 0:
+                    end = i + 1
+                    break
+        if end == -1:
+            raise ValueError("Unmatched braces in JSON")
+        return json.loads(text[start:end])
+
     def parse_master_bid(self, bid_text: str) -> Dict[str, Any]:
         if not self.llm: return {"tender_id": "UNKNOWN", "mandatory_docs": [], "pqc": [], "mandatory_specs": [], "preferred_specs": []}
         from langchain_core.prompts import PromptTemplate
@@ -856,8 +874,7 @@ class RAGAuditEngine(AuditEngine):
         chain = prompt | getattr(self, "llm_smart", self.llm) | StrOutputParser()
         try:
             response = chain.invoke({"context": context})
-            json_str = response[response.find('{'):response.rfind('}')+1]
-            return json.loads(json_str)
+            return self._extract_json(response)
         except Exception:
             return {"tender_id": "UNKNOWN", "mandatory_docs": [], "pqc": [], "mandatory_specs": [], "preferred_specs": []}
 
@@ -895,21 +912,23 @@ class RAGAuditEngine(AuditEngine):
             """
         )
         chain = prompt | self.llm | StrOutputParser()
-        try:
-            response = chain.invoke({"context": context, "tender_id": tender_id})
-            json_str = response[response.find('{'):response.rfind('}')+1]
-            data = json.loads(json_str)
-            
-            if not data.get("is_maf_present"):
-                return MAFResult(status=MAF_MISSING, evidence="No valid MAF document was identified in the submission.")
+        import time
+        for attempt in range(4):
+            try:
+                response = chain.invoke({"context": context, "tender_id": tender_id})
+                data = self._extract_json(response)
                 
-            src = data.get("source_file", "")
-            if data.get("is_valid"):
-                return MAFResult(status=MAF_VALID, evidence=f"Valid MAF. {data.get('reasoning')}\nExtracted: {data.get('extracted_snippet')}", source_file=src)
-            else:
-                return MAFResult(status=MAF_INVALID, evidence=f"Invalid MAF. {data.get('reasoning')}", source_file=src)
-        except Exception as e:
-            return MAFResult(status=MAF_INVALID, evidence=f"Failed to evaluate MAF: {str(e)}", source_file="")
+                if not data.get("is_maf_present"):
+                    return MAFResult(status=MAF_MISSING, evidence="No valid MAF document was identified in the submission.")
+                    
+                src = data.get("source_file", "")
+                if data.get("is_valid"):
+                    return MAFResult(status=MAF_VALID, evidence=f"Valid MAF. {data.get('reasoning')}\nExtracted: {data.get('extracted_snippet')}", source_file=src)
+                else:
+                    return MAFResult(status=MAF_INVALID, evidence=f"Invalid MAF. {data.get('reasoning')}", source_file=src)
+            except Exception:
+                time.sleep(1.5 * (attempt + 1))
+        return MAFResult(status=MAF_INVALID, evidence="Failed to evaluate MAF: Persistent LLM failure.", source_file="")
 
     def evaluate_pqc(self, pqc_reqs: List[Dict[str, Any]], vendor_text: str) -> List[PQCResult]:
         if not self.llm: return []
@@ -949,8 +968,7 @@ class RAGAuditEngine(AuditEngine):
             for attempt in range(4):
                 try:
                     response = chain.invoke({"req": json.dumps(req), "context": context})
-                    json_str = response[response.find('{'):response.rfind('}')+1]
-                    data = json.loads(json_str)
+                    data = self._extract_json(response)
                     provided = data.get("provided_value", "[NOT FOUND]")
                     passed = data.get("meets_threshold", False)
                     req_val = f"≥ {req.get('threshold', '')} {req.get('unit', '')}" if req.get('threshold') else "Required"
@@ -992,13 +1010,15 @@ class RAGAuditEngine(AuditEngine):
             """
         )
         chain = prompt | self.llm | StrOutputParser()
-        try:
-            response = chain.invoke({"mandatory_docs": json.dumps(mandatory_docs), "inventory_str": inventory_str})
-            json_str = response[response.find('{'):response.rfind('}')+1]
-            data = json.loads(json_str)
-            return data.get("missing_documents", [])
-        except Exception:
-            return []
+        import time
+        for attempt in range(4):
+            try:
+                response = chain.invoke({"mandatory_docs": json.dumps(mandatory_docs), "inventory_str": inventory_str})
+                data = self._extract_json(response)
+                return data.get("missing_documents", [])
+            except Exception:
+                time.sleep(1.5 * (attempt + 1))
+        return []
 
     def classify_document(self, filename: str, text: str) -> str:
         if not self.llm: return super().classify_document(filename, text)
@@ -1020,11 +1040,14 @@ class RAGAuditEngine(AuditEngine):
             Document Type:"""
         )
         chain = prompt | self.llm | StrOutputParser()
-        try:
-            doc_type = chain.invoke({"filename": filename, "text": text[:2000]}).strip()
-            return doc_type.strip('"\'')
-        except Exception:
-            return "Unclassified Document"
+        import time
+        for attempt in range(4):
+            try:
+                doc_type = chain.invoke({"filename": filename, "text": text[:2000]}).strip()
+                return doc_type.strip('"\'')
+            except Exception:
+                time.sleep(1.5 * (attempt + 1))
+        return "Unclassified Document"
 
     def detect_deviations(self, vendor_text: str) -> List[str]:
         if not self.llm: return []
@@ -1047,13 +1070,15 @@ class RAGAuditEngine(AuditEngine):
             """
         )
         chain = prompt | self.llm | StrOutputParser()
-        try:
-            response = chain.invoke({"text": vendor_text[:4000]})
-            json_str = response[response.find('{'):response.rfind('}')+1]
-            data = json.loads(json_str)
-            return data.get("deviations", [])[:6]
-        except Exception:
-            return []
+        import time
+        for attempt in range(4):
+            try:
+                response = chain.invoke({"text": vendor_text[:4000]})
+                data = self._extract_json(response)
+                return data.get("deviations", [])[:6]
+            except Exception:
+                time.sleep(1.5 * (attempt + 1))
+        return []
 
     def extract_spec(self, spec: Dict[str, Any], vendor_text: str, mandatory: bool) -> SpecResult:
         if not self.llm: return SpecResult(spec.get("label", ""), str(spec.get("required_value", "")), "[DATA LACKING]", "lacking", mandatory)
@@ -1090,8 +1115,7 @@ class RAGAuditEngine(AuditEngine):
         for attempt in range(4):
             try:
                 response = chain.invoke({"spec": json.dumps(spec), "context": context})
-                json_str = response[response.find('{'):response.rfind('}')+1]
-                data = json.loads(json_str)
+                data = self._extract_json(response)
                 required_val = str(spec.get("required_value", "Required"))
                 if "unit" in spec: required_val += f" {spec['unit']}"
                 return SpecResult(
@@ -2131,12 +2155,28 @@ def show_double_confirm_dialog(vendor_name: str, r: VendorResult, title: str, fi
     
     found_page = -1
     if snippet and search_text:
-        clean_snippet = " ".join(search_text.split())
+        clean_snippet = " ".join(search_text.split()).lower()
+        snippet_words = set(clean_snippet.split())
+        best_page = -1
+        best_score = 0
+        
         for i, page_text in enumerate(pages):
-            clean_page = " ".join(page_text.split())
+            clean_page = " ".join(page_text.split()).lower()
+            
+            # Exact substring match first
             if clean_snippet and (clean_snippet in clean_page or (len(clean_snippet) > 20 and clean_snippet[:20] in clean_page) or (len(clean_snippet) > 40 and clean_snippet[10:40] in clean_page)):
                 found_page = i
                 break
+                
+            # Fuzzy word intersection
+            page_words = set(clean_page.split())
+            overlap = len(snippet_words.intersection(page_words))
+            if overlap > best_score and overlap > 5:
+                best_score = overlap
+                best_page = i
+                
+        if found_page == -1 and best_page != -1:
+            found_page = best_page
             
     if found_page == -1 and pages:
         found_page = 0
@@ -4203,14 +4243,14 @@ def main() -> None:
                 
                 if has_maf:
                     with cols[col_idx % 3]:
-                        if st.button(f"🔍 Inspect MAF", key=f"dc_maf_{r.name}", use_container_width=True):
+                        if st.button(f"🔍 Inspect MAF", key=f"dc_maf_{r.name}", use_container_width=True, type="primary"):
                             src_file = r.maf.source_file if r.maf.source_file else "Unknown Source"
                             show_double_confirm_dialog(r.name, r, "MAF Validation", src_file, r.maf.evidence)
                     col_idx += 1
                     
                 for item in unreadable_docs:
                     with cols[col_idx % 3]:
-                        if st.button(f"🔍 Inspect {item.filename}", key=f"dc_unred_{r.name}_{item.filename}", use_container_width=True):
+                        if st.button(f"🔍 Inspect {item.filename}", key=f"dc_unred_{r.name}_{item.filename}", use_container_width=True, type="primary"):
                             show_double_confirm_dialog(r.name, r, "Unreadable Document Check", item.filename, "")
                     col_idx += 1
             
