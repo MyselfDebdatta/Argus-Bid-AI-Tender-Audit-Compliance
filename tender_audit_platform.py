@@ -872,19 +872,16 @@ class RAGAuditEngine(AuditEngine):
             """
         )
         chain_smart = prompt | getattr(self, "llm_smart", self.llm) | StrOutputParser()
-        chain_fast = prompt | self.llm | StrOutputParser()
         
-        try:
-            # Attempt 1: Route to 70B model
-            response = chain_smart.invoke({"context": context})
-            return self._extract_json(response)
-        except Exception:
+        import time
+        for attempt in range(4):
             try:
-                # Attempt 2: Immediate fallback to 8B model to prevent 15-min timeout
-                response = chain_fast.invoke({"context": context})
+                response = chain_smart.invoke({"context": context})
                 return self._extract_json(response)
-            except Exception:
-                return {"tender_id": "UNKNOWN", "mandatory_docs": [], "pqc": [], "mandatory_specs": [], "preferred_specs": []}
+            except Exception as e:
+                time.sleep(20)
+                
+        return {"tender_id": "UNKNOWN", "mandatory_docs": [], "pqc": [], "mandatory_specs": [], "preferred_specs": []}
 
     def validate_maf(self, inventory: List[InventoryItem], files: Dict[str, str], tender_id: str) -> MAFResult:
         if not self.llm: return MAFResult(status=MAF_MISSING, evidence="LLM not initialized.")
