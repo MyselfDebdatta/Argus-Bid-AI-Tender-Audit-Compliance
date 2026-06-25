@@ -841,10 +841,10 @@ class RAGAuditEngine(AuditEngine):
         
         vs = self._create_vectorstore(bid_text, "master_bid")
         if vs:
-            relevant_docs = vs.similarity_search("mandatory technical specifications preferred requirements pre-qualification criteria MAF documents needed", k=20)
+            relevant_docs = vs.similarity_search("mandatory technical specifications preferred requirements pre-qualification criteria MAF documents needed", k=6)
             context = "\n\n".join([d.page_content for d in relevant_docs])
         else:
-            context = bid_text[:25000] # Fallback: inject raw text up to ~6k tokens
+            context = bid_text[:8000] # Fallback: inject raw text safely within TPM limits
 
         prompt = PromptTemplate(
             input_variables=["context"],
@@ -871,12 +871,20 @@ class RAGAuditEngine(AuditEngine):
             JSON Output:
             """
         )
-        chain = prompt | getattr(self, "llm_smart", self.llm) | StrOutputParser()
+        chain_smart = prompt | getattr(self, "llm_smart", self.llm) | StrOutputParser()
+        chain_fast = prompt | self.llm | StrOutputParser()
+        
         try:
-            response = chain.invoke({"context": context})
+            # Attempt 1: Route to 70B model
+            response = chain_smart.invoke({"context": context})
             return self._extract_json(response)
         except Exception:
-            return {"tender_id": "UNKNOWN", "mandatory_docs": [], "pqc": [], "mandatory_specs": [], "preferred_specs": []}
+            try:
+                # Attempt 2: Immediate fallback to 8B model to prevent 15-min timeout
+                response = chain_fast.invoke({"context": context})
+                return self._extract_json(response)
+            except Exception:
+                return {"tender_id": "UNKNOWN", "mandatory_docs": [], "pqc": [], "mandatory_specs": [], "preferred_specs": []}
 
     def validate_maf(self, inventory: List[InventoryItem], files: Dict[str, str], tender_id: str) -> MAFResult:
         if not self.llm: return MAFResult(status=MAF_MISSING, evidence="LLM not initialized.")
