@@ -839,12 +839,8 @@ class RAGAuditEngine(AuditEngine):
         from langchain_core.prompts import PromptTemplate
         from langchain_core.output_parsers import StrOutputParser
         
-        vs = self._create_vectorstore(bid_text, "master_bid")
-        if vs:
-            relevant_docs = vs.similarity_search("mandatory technical specifications preferred requirements pre-qualification criteria MAF documents needed", k=20)
-            context = "\n\n".join([d.page_content for d in relevant_docs])
-        else:
-            context = bid_text[:25000] # Fallback: inject raw text up to ~6k tokens
+        # Bypass vector fragmentation to ensure contiguous extraction of tabular specs
+        context = bid_text[:25000]
 
         prompt = PromptTemplate(
             input_variables=["context"],
