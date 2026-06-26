@@ -776,8 +776,8 @@ class RAGAuditEngine(AuditEngine):
             if groq_key:
                 try:
                     from langchain_groq import ChatGroq
-                    self.llm = ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=groq_key, temperature=0.0)
-                    self.llm_smart = ChatGroq(model_name="llama-3.3-70b-versatile", groq_api_key=groq_key, temperature=0.0, max_retries=0)
+                    self.llm = ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=groq_key, temperature=0.0, max_retries=0, timeout=30)
+                    self.llm_smart = ChatGroq(model_name="llama-3.3-70b-versatile", groq_api_key=groq_key, temperature=0.0, max_retries=0, timeout=45)
                 except ImportError:
                     from langchain_community.llms import Ollama
                     self.llm = Ollama(model=self.model_name, temperature=0.0)
