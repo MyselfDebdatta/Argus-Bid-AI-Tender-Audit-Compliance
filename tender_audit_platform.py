@@ -2038,7 +2038,6 @@ def run_audit() -> None:
     
     # Step 0: Parsing Master BID
     placeholder.markdown(render_audit_terminal(0, "Pending Vendor Analysis...", 0.0), unsafe_allow_html=True)
-    time.sleep(0.4)
     ss.bid = engine.parse_master_bid(ss.bid_text)
 
     names = list(ss.vendor_files.keys())
@@ -2048,17 +2047,14 @@ def run_audit() -> None:
     for i, name in enumerate(names, start=1):
         pct = (i / max(len(names), 1)) * 100
         placeholder.markdown(render_audit_terminal(1, f"Analyzing {name} ({i}/{len(names)})...", pct), unsafe_allow_html=True)
-        time.sleep(0.3)
         files = ss.vendor_files[name]
         errors = ss.vendor_errors.get(name, {f: None for f in files})
         results.append(engine.analyze_vendor(name, files, errors, ss.bid))
     
     # Step 2: Generating Ranking & Summary
     placeholder.markdown(render_audit_terminal(2, f"Analyzed {len(names)} vendor submissions.", 100.0), unsafe_allow_html=True)
-    time.sleep(0.4)
     ss.xai = engine.rank_and_explain(results)
     ss.narrative = engine.narrate(ss.bid, results) if isinstance(engine, RAGAuditEngine) else None
-    time.sleep(0.4)
     
     # Step 3: Complete & Clear
     placeholder.empty()
