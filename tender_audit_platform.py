@@ -634,16 +634,20 @@ class AuditEngine:
         r.status = STATUS_DISQUALIFIED if r.disqualified else STATUS_RESPONSIVE
 
     def _score(self, r: VendorResult) -> None:
-        if r.disqualified:
-            r.score = r.mandatory_score = r.preferred_score = 0.0
-            return
         mand = r.mandatory_specs
         pref = r.preferred_specs
         mand_match = sum(1 for s in mand if s.status == "match")
         pref_match = sum(1 for s in pref if s.status == "match")
         r.mandatory_score = (mand_match / len(mand) * 70.0) if mand else 70.0
         r.preferred_score = (pref_match / len(pref) * 30.0) if pref else 0.0
-        r.score = round(r.mandatory_score + r.preferred_score, 1)
+        
+        base_score = r.mandatory_score + r.preferred_score
+        
+        if r.disqualified:
+            penalty = len(r.violations) * 15
+            base_score = max(0.0, base_score - penalty)
+            
+        r.score = round(base_score, 1)
 
     def _summarize(self, r: VendorResult) -> str:
         if r.disqualified:
@@ -676,13 +680,14 @@ class AuditEngine:
 
     # ---- ranking + XAI -------------------------------------------------
     def rank_and_explain(self, results: List[VendorResult]) -> List[str]:
-        responsive = [r for r in results if not r.disqualified]
-        responsive.sort(key=lambda x: x.score, reverse=True)
-        for i, r in enumerate(responsive, start=1):
+        def sort_key(x):
+            return (1000 if not x.disqualified else 0) + x.score - (len(x.violations) * 5)
+            
+        results.sort(key=sort_key, reverse=True)
+        for i, r in enumerate(results, start=1):
             r.rank = i
-        for r in results:
-            if r.disqualified:
-                r.rank = None
+
+        responsive = [r for r in results if not r.disqualified]
 
         explanations: List[str] = []
         for i in range(len(responsive) - 1):
@@ -884,14 +889,20 @@ class RAGAuditEngine(AuditEngine):
         from langchain_core.prompts import PromptTemplate
         from langchain_core.output_parsers import StrOutputParser
 
-        vs = self._create_multi_vectorstore(files, "temp_maf_search")
-        if vs:
-            relevant_docs = vs.similarity_search("Manufacturer Authorization Form MAF OEM Letter", k=4)
-            if not relevant_docs:
-                return MAFResult(status=MAF_MISSING, evidence="Could not locate any Manufacturer Authorization related documents.")
-            context = "\n\n".join([f"Source File: {d.metadata.get('source')}\nContent:\n{d.page_content}" for d in relevant_docs])
+        maf_files = [item.filename for item in inventory if "MAF" in item.doc_type or "Authorization" in item.doc_type]
+        
+        if maf_files:
+            # Bypass vector search, we already know which file is the MAF!
+            context = "\n\n".join([f"Source File: {f}\nContent:\n{files[f][:20000]}" for f in maf_files if f in files])
         else:
-            context = "\n\n".join([f"Source File: {n}\n{t[:5000]}" for n, t in files.items()])[:25000]
+            vs = self._create_multi_vectorstore(files, "temp_maf_search")
+            if vs:
+                relevant_docs = vs.similarity_search("Manufacturer Authorization Form MAF OEM Letter", k=4)
+                if not relevant_docs:
+                    return MAFResult(status=MAF_MISSING, evidence="Could not locate any Manufacturer Authorization related documents.")
+                context = "\n\n".join([f"Source File: {d.metadata.get('source')}\nContent:\n{d.page_content}" for d in relevant_docs])
+            else:
+                context = "\n\n".join([f"Source File: {n}\n{t[:5000]}" for n, t in files.items()])[:25000]
 
         prompt = PromptTemplate(
             input_variables=["context", "tender_id"],
@@ -942,7 +953,7 @@ class RAGAuditEngine(AuditEngine):
         for req in pqc_reqs:
             query = f"{req['label']} {req.get('key', '')} requirements"
             if vs:
-                relevant_docs = vs.similarity_search(query, k=5)
+                relevant_docs = vs.similarity_search(query, k=12)
                 context = "\n\n".join([d.page_content for d in relevant_docs])
             else:
                 context = vendor_text[:25000]
@@ -1090,7 +1101,7 @@ class RAGAuditEngine(AuditEngine):
         query = f"{spec.get('label', '')} {spec.get('param', '')}"
         
         if vs:
-            relevant_docs = vs.similarity_search(query, k=5)
+            relevant_docs = vs.similarity_search(query, k=12)
             context = "\n\n".join([d.page_content for d in relevant_docs])
         else:
             context = vendor_text[:25000]
@@ -1137,16 +1148,15 @@ class RAGAuditEngine(AuditEngine):
         from langchain_core.prompts import PromptTemplate
         from langchain_core.output_parsers import StrOutputParser
         
-        ranked = sorted([r for r in results if not r.disqualified], key=lambda x: x.score, reverse=True)
-        dq = [r for r in results if r.disqualified]
+        ranked = sorted(results, key=lambda x: (x.rank if x.rank else 999))
         ctx = {
             "tender_id": bid.get("tender_id"),
-            "responsive": [{"name": r.name, "rank": r.rank, "score": r.score, "summary": r.summary} for r in ranked],
-            "disqualified": [{"name": r.name, "reasons": [v.title for v in r.violations]} for r in dq],
+            "vendors": [{"name": r.name, "rank": r.rank, "score": r.score, "status": r.status, "disqualification_reasons": [v.title for v in r.violations] if r.disqualified else []} for r in ranked],
         }
         prompt = PromptTemplate(
             input_variables=["context"],
-            template="""You are a PSU tender evaluation officer. Write a concise, formal executive summary (max 120 words) of the evaluation outcome. Be factual, cite ranks and the decisive reasons. Do not invent data beyond what is provided.
+            template="""You are a PSU tender evaluation officer. Write a concise, formal executive summary (max 150 words) of the evaluation outcome. 
+            Be factual, cite ranks. IMPORTANT: For any disqualified vendors, you MUST explicitly list EVERY SINGLE reason they were disqualified based on the provided context. Do not invent data beyond what is provided.
             
             Context:
             {context}
@@ -3738,7 +3748,7 @@ def render_leaderboard(results: List[VendorResult]) -> None:
         rank_html = get_rank_html(r.rank)
         dq_cls = "dq" if r.disqualified else ""
         bar_cls = "bar dq" if r.disqualified else "bar"
-        width = 0 if r.disqualified else r.score
+        width = r.score
         nfiles = sum(len(v) for v in [st.session_state.vendor_files.get(r.name, {})])
         rows.append(f"""
         <tr class="{dq_cls}">
