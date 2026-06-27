@@ -833,36 +833,37 @@ class RAGAuditEngine(AuditEngine):
     def _extract_json(self, text: str):
         """Robustly extracts the first complete JSON object or array from text."""
         import json
+        import re
         
         # Try to find and parse a JSON object first
-        start_obj = text.find('{')
-        if start_obj != -1:
+        for match in re.finditer(r'\{', text):
+            start = match.start()
             stack = 0
-            for i in range(start_obj, len(text)):
+            for i in range(start, len(text)):
                 if text[i] == '{': stack += 1
                 elif text[i] == '}':
                     stack -= 1
                     if stack == 0:
                         try:
-                            res = json.loads(text[start_obj:i+1])
+                            res = json.loads(text[start:i+1])
                             if isinstance(res, dict): return res
                         except json.JSONDecodeError:
-                            pass
+                            break  # Try the next '{'
                             
         # If no object found, try to find and parse a JSON array
-        start_arr = text.find('[')
-        if start_arr != -1:
+        for match in re.finditer(r'\[', text):
+            start = match.start()
             stack = 0
-            for i in range(start_arr, len(text)):
+            for i in range(start, len(text)):
                 if text[i] == '[': stack += 1
                 elif text[i] == ']':
                     stack -= 1
                     if stack == 0:
                         try:
-                            res = json.loads(text[start_arr:i+1])
+                            res = json.loads(text[start:i+1])
                             if isinstance(res, list): return res
                         except json.JSONDecodeError:
-                            pass
+                            break  # Try the next '['
                             
         raise ValueError("No valid JSON object or array found in text")
 
@@ -907,8 +908,11 @@ class RAGAuditEngine(AuditEngine):
                 response = chain_smart.invoke({"context": context})
                 return self._extract_json(response)
             except Exception as e:
+                print(f"parse_master_bid failed (Attempt {attempt+1}): {e}")
                 if "429" in str(e) or "RateLimit" in type(e).__name__:
                     time.sleep(20)
+                else:
+                    time.sleep(5)
                 
         return {"tender_id": "UNKNOWN", "mandatory_docs": [], "pqc": [], "mandatory_specs": [], "preferred_specs": []}
 
