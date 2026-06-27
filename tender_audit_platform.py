@@ -582,11 +582,16 @@ class AuditEngine:
         # 3. PQC
         result.pqc = self.evaluate_pqc(bid.get("pqc", []), combined_text)
 
-        # 4. Technical specs
-        for spec in bid.get("mandatory_specs", []):
-            result.mandatory_specs.append(self.extract_spec(spec, combined_text, True))
-        for spec in bid.get("preferred_specs", []):
-            result.preferred_specs.append(self.extract_spec(spec, combined_text, False))
+        # 4. Technical specs (Batched)
+        def batch_list(lst, n):
+            for i in range(0, len(lst), n):
+                yield lst[i:i + n]
+                
+        for batch in batch_list(bid.get("mandatory_specs", []), 10):
+            result.mandatory_specs.extend(self.extract_specs_batch(batch, combined_text, True))
+            
+        for batch in batch_list(bid.get("preferred_specs", []), 10):
+            result.preferred_specs.extend(self.extract_specs_batch(batch, combined_text, False))
 
         # 5. Deviations
         result.deviations = self.detect_deviations(combined_text)
@@ -1100,57 +1105,89 @@ class RAGAuditEngine(AuditEngine):
                 time.sleep(1.5 * (attempt + 1))
         return []
 
-    def extract_spec(self, spec: Dict[str, Any], vendor_text: str, mandatory: bool) -> SpecResult:
-        if not self.llm: return SpecResult(spec.get("label", ""), str(spec.get("required_value", "")), "[DATA LACKING]", "lacking", mandatory)
+    def extract_specs_batch(self, specs: List[Dict[str, Any]], vendor_text: str, mandatory: bool) -> List[SpecResult]:
+        if not self.llm or not specs: 
+            return [SpecResult(s.get("label", ""), str(s.get("required_value", "")), "[DATA LACKING]", "lacking", mandatory) for s in specs]
+            
         from langchain_core.prompts import PromptTemplate
         from langchain_core.output_parsers import StrOutputParser
 
         vs = self._create_vectorstore(vendor_text, "temp_vendor_search")
-        query = f"{spec.get('label', '')} {spec.get('param', '')}"
         
+        unique_chunks = {}
         if vs:
-            relevant_docs = vs.similarity_search(query, k=6)
-            context = "\n\n".join([d.page_content for d in relevant_docs])
+            for s in specs:
+                query = f"{s.get('label', '')} {s.get('param', '')}"
+                docs = vs.similarity_search(query, k=3)
+                for d in docs:
+                    unique_chunks[d.page_content] = True
+            context = "\n\n".join(unique_chunks.keys())
         else:
             context = vendor_text[:25000]
 
         prompt = PromptTemplate(
-            input_variables=["spec", "context"],
-            template="""You are checking a vendor's technical submission against a required specification.
-            Specification to check: {spec}
+            input_variables=["specs", "context"],
+            template="""You are checking a vendor's technical submission against a list of required specifications.
+            Specifications to check:
+            {specs}
             
             Vendor Text Context:
             {context}
             
-            Determine if the vendor meets the specification.
-            Output JSON exactly like this:
-            {{
-                "provided_value": "The value the vendor provided, or '[DATA LACKING]'",
-                "status": "match" if they meet the spec, else "fail", else "lacking" if not found
-            }}
+            Determine if the vendor meets each specification.
+            Output JSON exactly like this, returning a list of objects in the same order:
+            [
+                {{
+                    "label": "The label of the spec from the input",
+                    "provided_value": "The value the vendor provided, or '[DATA LACKING]'",
+                    "status": "match" if they meet the spec, else "fail", else "lacking" if not found
+                }}
+            ]
             """
         )
         chain = prompt | self.llm | StrOutputParser()
         import time
+        import json
         for attempt in range(4):
             try:
-                response = chain.invoke({"spec": json.dumps(spec), "context": context})
-                data = self._extract_json(response)
-                required_val = str(spec.get("required_value", "Required"))
-                if "unit" in spec: required_val += f" {spec['unit']}"
-                return SpecResult(
-                    param=spec.get("label", ""),
-                    required=required_val,
-                    provided=data.get("provided_value", "[DATA LACKING]"),
-                    status=data.get("status", "lacking"),
-                    mandatory=mandatory
-                )
+                specs_json = json.dumps([{"label": s.get("label", ""), "required_value": s.get("required_value", "")} for s in specs])
+                response = chain.invoke({"specs": specs_json, "context": context})
+                data_list = self._extract_json(response)
+                
+                if not isinstance(data_list, list):
+                    raise ValueError("Expected JSON list")
+                
+                extracted_map = {item.get("label", ""): item for item in data_list if isinstance(item, dict)}
+                
+                results = []
+                for s in specs:
+                    label = s.get("label", "")
+                    req_val = str(s.get("required_value", "Required"))
+                    if "unit" in s: req_val += f" {s['unit']}"
+                    
+                    if label in extracted_map:
+                        ext = extracted_map[label]
+                        results.append(SpecResult(
+                            param=label,
+                            required=req_val,
+                            provided=ext.get("provided_value", "[DATA LACKING]"),
+                            status=ext.get("status", "lacking"),
+                            mandatory=mandatory
+                        ))
+                    else:
+                        results.append(SpecResult(label, req_val, "[DATA LACKING]", "lacking", mandatory))
+                return results
+                
             except Exception as e:
                 if "429" in str(e) or "RateLimit" in type(e).__name__:
                     time.sleep(20)
                 
-        required_val = str(spec.get("required_value", "Required"))
-        return SpecResult(spec.get("label", ""), required_val, "[DATA LACKING]", "lacking", mandatory)
+        results = []
+        for s in specs:
+            req_val = str(s.get("required_value", "Required"))
+            if "unit" in s: req_val += f" {s['unit']}"
+            results.append(SpecResult(s.get("label", ""), req_val, "[DATA LACKING]", "lacking", mandatory))
+        return results
 
     def narrate(self, bid: Dict[str, Any], results: List[VendorResult]) -> Optional[str]:
         if not self.llm: return None
