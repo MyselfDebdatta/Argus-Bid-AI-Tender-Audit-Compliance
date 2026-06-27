@@ -832,29 +832,39 @@ class RAGAuditEngine(AuditEngine):
 
     def _extract_json(self, text: str):
         """Robustly extracts the first complete JSON object or array from text."""
+        import json
+        
+        # Try to find and parse a JSON object first
         start_obj = text.find('{')
+        if start_obj != -1:
+            stack = 0
+            for i in range(start_obj, len(text)):
+                if text[i] == '{': stack += 1
+                elif text[i] == '}':
+                    stack -= 1
+                    if stack == 0:
+                        try:
+                            res = json.loads(text[start_obj:i+1])
+                            if isinstance(res, dict): return res
+                        except json.JSONDecodeError:
+                            pass
+                            
+        # If no object found, try to find and parse a JSON array
         start_arr = text.find('[')
-        
-        if start_obj == -1 and start_arr == -1:
-            raise ValueError("No JSON found")
-            
-        start = start_obj if start_arr == -1 else (start_arr if start_obj == -1 else min(start_obj, start_arr))
-        is_array = (text[start] == '[')
-        open_char = '[' if is_array else '{'
-        close_char = ']' if is_array else '}'
-        
-        stack = 0
-        end = -1
-        for i in range(start, len(text)):
-            if text[i] == open_char: stack += 1
-            elif text[i] == close_char:
-                stack -= 1
-                if stack == 0:
-                    end = i + 1
-                    break
-        if end == -1:
-            raise ValueError("Unmatched braces/brackets in JSON")
-        return json.loads(text[start:end])
+        if start_arr != -1:
+            stack = 0
+            for i in range(start_arr, len(text)):
+                if text[i] == '[': stack += 1
+                elif text[i] == ']':
+                    stack -= 1
+                    if stack == 0:
+                        try:
+                            res = json.loads(text[start_arr:i+1])
+                            if isinstance(res, list): return res
+                        except json.JSONDecodeError:
+                            pass
+                            
+        raise ValueError("No valid JSON object or array found in text")
 
     def parse_master_bid(self, bid_text: str) -> Dict[str, Any]:
         if not self.llm: return {"tender_id": "UNKNOWN", "mandatory_docs": [], "pqc": [], "mandatory_specs": [], "preferred_specs": []}
@@ -955,7 +965,7 @@ class RAGAuditEngine(AuditEngine):
                 if data.get("is_valid"):
                     return MAFResult(status=MAF_VALID, evidence=f"Valid MAF. {data.get('reasoning')}\nExtracted: {data.get('extracted_snippet')}", source_file=src)
                 else:
-                    return MAFResult(status=MAF_INVALID, evidence=f"Invalid MAF. {data.get('reasoning')}", source_file=src)
+                    return MAFResult(status=MAF_INVALID, evidence=f"Invalid MAF. {data.get('reasoning')}\nExtracted: {data.get('extracted_snippet')}", source_file=src)
             except Exception as e:
                 if "429" in str(e) or "RateLimit" in type(e).__name__:
                     time.sleep(20)
@@ -1126,7 +1136,7 @@ class RAGAuditEngine(AuditEngine):
         if vs:
             for s in specs:
                 query = f"{s.get('label', '')} {s.get('param', '')}"
-                docs = vs.similarity_search(query, k=3)
+                docs = vs.similarity_search(query, k=1)
                 for d in docs:
                     unique_chunks[d.page_content] = True
             context = "\n\n".join(unique_chunks.keys())
@@ -1156,7 +1166,7 @@ class RAGAuditEngine(AuditEngine):
         chain = prompt | self.llm | StrOutputParser()
         import time
         import json
-        for attempt in range(4):
+        for attempt in range(6):
             try:
                 specs_json = json.dumps([{"label": s.get("label", ""), "required_value": s.get("required_value", "")} for s in specs])
                 response = chain.invoke({"specs": specs_json, "context": context})
@@ -1188,7 +1198,7 @@ class RAGAuditEngine(AuditEngine):
                 
             except Exception as e:
                 if "429" in str(e) or "RateLimit" in type(e).__name__:
-                    time.sleep(20)
+                    time.sleep(25)
                 
         results = []
         for s in specs:
