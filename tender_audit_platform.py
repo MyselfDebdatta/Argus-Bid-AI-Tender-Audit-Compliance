@@ -1140,7 +1140,7 @@ class RAGAuditEngine(AuditEngine):
         if vs:
             for s in specs:
                 query = f"{s.get('label', '')} {s.get('param', '')}"
-                docs = vs.similarity_search(query, k=1)
+                docs = vs.similarity_search(query, k=3)
                 for d in docs:
                     unique_chunks[d.page_content] = True
             context = "\n\n".join(unique_chunks.keys())
@@ -1201,8 +1201,11 @@ class RAGAuditEngine(AuditEngine):
                 return results
                 
             except Exception as e:
+                print(f"extract_specs_batch failed on attempt {attempt+1}: {e}")
                 if "429" in str(e) or "RateLimit" in type(e).__name__:
                     time.sleep(25)
+                else:
+                    time.sleep(5)
                 
         results = []
         for s in specs:
@@ -1816,6 +1819,8 @@ def save_state_to_disk() -> None:
             "bid_files": ss.get("bid_files", {}),
             "vendor_files": ss.get("vendor_files", {}),
             "vendor_errors": ss.get("vendor_errors", {}),
+            "vendor_files_raw": ss.get("vendor_files_raw", {}),
+            "vendor_files_pages": ss.get("vendor_files_pages", {}),
             "bid": None,
             "results": None,
             "xai": [],
@@ -1846,6 +1851,8 @@ def load_state_from_disk() -> bool:
         ss.bid_files = data.get("bid_files", {})
         ss.vendor_files = data.get("vendor_files", {})
         ss.vendor_errors = data.get("vendor_errors", {})
+        ss.vendor_files_raw = data.get("vendor_files_raw", {})
+        ss.vendor_files_pages = data.get("vendor_files_pages", {})
         ss.bid = data.get("bid")
         ss.results = data.get("results", None)
         ss.xai = data.get("xai", [])
