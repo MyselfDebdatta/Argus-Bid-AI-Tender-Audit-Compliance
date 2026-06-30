@@ -2218,7 +2218,7 @@ def view_documents_dialog(title: str, files_dict: Dict[str, str]) -> None:
             st.markdown(f"<div style='max-height: 500px; overflow-y: auto; overflow-x: hidden; background: var(--panel2); padding: 16px 22px; border-radius: 8px; border: 1px solid var(--line);'>{formatted_html}</div>", unsafe_allow_html=True)
 
 
-@dialog_decorator("🔍 Double-Confirm Source", width="large")
+@dialog_decorator("Double-Confirm Source", width="large")
 def show_double_confirm_dialog(vendor_name: str, r: VendorResult, title: str, filename: str, snippet: str = "") -> None:
     st.markdown("""
         <style>
@@ -2230,7 +2230,8 @@ def show_double_confirm_dialog(vendor_name: str, r: VendorResult, title: str, fi
         </style>
     """, unsafe_allow_html=True)
     
-    st.markdown(f"<div class='dc-modal-title'>{title} for {html.escape(vendor_name)}</div>", unsafe_allow_html=True)
+    svg_icon = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 4px rgba(56,189,248,0.8)); margin-right: 8px;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>'
+    st.markdown(f"<div class='dc-modal-title' style='display: flex; align-items: center;'>{svg_icon} {title} for {html.escape(vendor_name)}</div>", unsafe_allow_html=True)
     st.markdown("<div class='dc-modal-subtitle'>Inspect the original PDF rendering to verify.</div>", unsafe_allow_html=True)
     
     vendor_pages = st.session_state.get("vendor_files_pages", {}).get(vendor_name, {})
@@ -2299,7 +2300,7 @@ def show_double_confirm_dialog(vendor_name: str, r: VendorResult, title: str, fi
             with pdfplumber.open(io.BytesIO(raw_bytes)) as pdf:
                 page = pdf.pages[found_page]
                 im = page.to_image(resolution=72)
-                st.image(im.original)
+                st.image(im.original, use_container_width=True)
                 del im
             import gc
             gc.collect()
