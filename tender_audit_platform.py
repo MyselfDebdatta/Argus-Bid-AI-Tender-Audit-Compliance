@@ -3917,6 +3917,9 @@ def render_leaderboard(results: List[VendorResult]) -> None:
 
 def render_xai(xai: List[str], narrative: Optional[str]) -> None:
     if narrative:
+        import re
+        safe_narrative = html.escape(narrative)
+        safe_narrative = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', safe_narrative)
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.05) 0%, rgba(15, 23, 42, 0.8) 100%); 
                     border: 1px solid rgba(56, 189, 248, 0.2); 
@@ -3934,7 +3937,7 @@ def render_xai(xai: List[str], narrative: Optional[str]) -> None:
                 <h4 style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px;">Argus Bid AI Executive Summary</h4>
             </div>
             <div style="color: #F8FAFC; font-size: 15px; line-height: 1.7; position: relative; z-index: 1; font-weight: 400;">
-                {html.escape(narrative)}
+                {safe_narrative}
             </div>
         </div>
         """, unsafe_allow_html=True)
