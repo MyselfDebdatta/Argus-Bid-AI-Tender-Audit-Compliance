@@ -1156,7 +1156,8 @@ class RAGAuditEngine(AuditEngine):
             Vendor Text Context:
             {context}
             
-            Determine if the vendor meets each specification.
+            Determine if the vendor meets each specification based ONLY on the context.
+            Output ONLY the raw JSON array. DO NOT write a script. DO NOT write Python code. DO NOT write explanations.
             Output JSON exactly like this, returning a list of objects in the same order:
             [
                 {{
