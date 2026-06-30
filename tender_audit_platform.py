@@ -3871,7 +3871,7 @@ def render_leaderboard(results: List[VendorResult]) -> None:
                 dyn_doc_cells += '<td><span style="color: #10b981; font-weight:600;">Given</span></td>'
                 
         tech_rec = "Technically NOT Accepted" if r.disqualified or any("Technical" in v.title for v in r.violations) else "Technically Accepted"
-        com_pqc = "Not Meeting Criteria" if any(p.status != "pass" for p in r.pqc) else "Meeting Criteria"
+        com_pqc = "Not Meeting Criteria" if any(not p.passed for p in r.pqc) else "Meeting Criteria"
         com_rec = "Techno-commercially NOT Accepted" if r.disqualified else "Techno-commercially Accepted"
 
         rows.append(f"""
