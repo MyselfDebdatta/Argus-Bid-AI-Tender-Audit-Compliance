@@ -3887,6 +3887,7 @@ def render_leaderboard(results: List[VendorResult]) -> None:
           <td>{get_eval_pill(com_rec, "NOT" not in com_rec)}</td>
           <td><div class="scorewrap"><div class="{bar_cls}"><span style="width:{width}%"></span></div>
               <span class="scoreval">{r.score:g}%</span></div></td>
+          <td style="color:var(--muted);font-size:12.5px;max-width:280px;white-space:normal;overflow:hidden;line-height:1.5;">{html.escape(r.summary)}</td>
         </tr>""")
         
     dyn_headers = "".join(f"<th>{html.escape(doc)}</th>" for doc in dynamic_docs)
@@ -3905,6 +3906,7 @@ def render_leaderboard(results: List[VendorResult]) -> None:
           <th>Commercial PQC</th>
           <th>Commercial Recommendation</th>
           <th>Compliance Score</th>
+          <th>Key Takeaway</th>
         </tr>
       </thead>
       <tbody>{''.join(rows)}</tbody>
