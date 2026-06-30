@@ -830,42 +830,33 @@ class RAGAuditEngine(AuditEngine):
         self.vectorstores[real_id] = vectorstore
         return vectorstore
 
-    def _extract_json(self, text: str):
+    def _extract_json(self, text: str, expected_type=dict):
         """Robustly extracts the first complete JSON object or array from text."""
         import json
         import re
         
-        # Try to find and parse a JSON object first
-        for match in re.finditer(r'\{', text):
+        if expected_type == dict:
+            pattern = r'\{'
+            opener, closer = '{', '}'
+        else:
+            pattern = r'\['
+            opener, closer = '[', ']'
+            
+        for match in re.finditer(pattern, text):
             start = match.start()
             stack = 0
             for i in range(start, len(text)):
-                if text[i] == '{': stack += 1
-                elif text[i] == '}':
+                if text[i] == opener: stack += 1
+                elif text[i] == closer:
                     stack -= 1
                     if stack == 0:
                         try:
                             res = json.loads(text[start:i+1])
-                            if isinstance(res, dict): return res
+                            if isinstance(res, expected_type): return res
                         except json.JSONDecodeError:
-                            break  # Try the next '{'
+                            break
                             
-        # If no object found, try to find and parse a JSON array
-        for match in re.finditer(r'\[', text):
-            start = match.start()
-            stack = 0
-            for i in range(start, len(text)):
-                if text[i] == '[': stack += 1
-                elif text[i] == ']':
-                    stack -= 1
-                    if stack == 0:
-                        try:
-                            res = json.loads(text[start:i+1])
-                            if isinstance(res, list): return res
-                        except json.JSONDecodeError:
-                            break  # Try the next '['
-                            
-        raise ValueError("No valid JSON object or array found in text")
+        raise ValueError(f"No valid JSON {expected_type.__name__} found in text")
 
     def parse_master_bid(self, bid_text: str) -> Dict[str, Any]:
         if not self.llm: return {"tender_id": "UNKNOWN", "mandatory_docs": [], "pqc": [], "mandatory_specs": [], "preferred_specs": []}
@@ -1175,7 +1166,8 @@ class RAGAuditEngine(AuditEngine):
             try:
                 specs_json = json.dumps([{"label": s.get("label", ""), "required_value": s.get("required_value", "")} for s in specs])
                 response = chain.invoke({"specs": specs_json, "context": context})
-                data_list = self._extract_json(response)
+                print(f"RAW LLM: {response}")
+                data_list = self._extract_json(response, expected_type=list)
                 
                 if not isinstance(data_list, list):
                     raise ValueError("Expected JSON list")
