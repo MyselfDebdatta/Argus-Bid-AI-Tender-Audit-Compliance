@@ -494,6 +494,7 @@ class VendorResult:
     preferred_specs: List[SpecResult] = field(default_factory=list)
     deviations: List[str] = field(default_factory=list)
     missing_documents: List[str] = field(default_factory=list)
+    make_and_model: str = "Not Given"
     disqualified: bool = False
     violations: List[Violation] = field(default_factory=list)
     score: float = 0.0
@@ -556,6 +557,7 @@ class AuditEngine:
 
     # ---- document classification ---------------------------------------
     def classify_document(self, filename: str, text: str) -> str: return "Unclassified Document"
+    def extract_make_and_model(self, vendor_text: str) -> str: return "Not Given"
     def validate_maf(self, inventory: List[InventoryItem], files: Dict[str, str], tender_id: str) -> MAFResult: return MAFResult(status=MAF_MISSING, evidence="Engine fallback")
     def extract_spec(self, spec: Dict[str, Any], vendor_text: str, mandatory: bool) -> SpecResult: return SpecResult(spec.get("label", ""), str(spec.get("required_value", "")), "[DATA LACKING]", "lacking", mandatory)
     def detect_deviations(self, vendor_text: str) -> List[str]: return []
@@ -575,6 +577,9 @@ class AuditEngine:
 
         present_types = {i.doc_type for i in result.inventory}
         combined_text = "\n".join(files.values())
+
+        # 1.5 Make and model
+        result.make_and_model = self.extract_make_and_model(combined_text)
 
         # 2. MAF gate
         result.maf = self.validate_maf(result.inventory, files, bid.get("tender_id", ""))
@@ -1086,6 +1091,32 @@ class RAGAuditEngine(AuditEngine):
                 if "429" in str(e) or "RateLimit" in type(e).__name__:
                     time.sleep(20)
         return "Unclassified Document"
+
+    def extract_make_and_model(self, vendor_text: str) -> str:
+        if not self.llm: return "Not Given"
+        from langchain_core.prompts import PromptTemplate
+        from langchain_core.output_parsers import StrOutputParser
+        
+        prompt = PromptTemplate(
+            input_variables=["text"],
+            template="""You are a technical auditor. Extract the exact 'Make and Model' of the primary equipment proposed by the vendor.
+            
+            Vendor Text (truncated):
+            {text}
+            
+            Provide ONLY the Make and Model string and nothing else. If it is not clearly stated, output "Not Given".
+            Make and Model:"""
+        )
+        chain = prompt | self.llm | StrOutputParser()
+        import time
+        for attempt in range(4):
+            try:
+                res = chain.invoke({"text": vendor_text[:15000]}).strip()
+                return res.strip('"\'')
+            except Exception as e:
+                if "429" in str(e) or "RateLimit" in type(e).__name__:
+                    time.sleep(5)
+        return "Not Given"
 
     def detect_deviations(self, vendor_text: str) -> List[str]:
         if not self.llm: return []
@@ -3811,31 +3842,71 @@ def render_leaderboard(results: List[VendorResult]) -> None:
         if rank == 2: return '<div class="rank-badge rank-2">#2</div>'
         if rank == 3: return '<div class="rank-badge rank-3">#3</div>'
         return f'<div class="rank-badge rank-other">#{rank}</div>'
+        
+    def get_eval_pill(text: str, is_good: bool) -> str:
+        ok_svg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+        bad_svg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>'
+        cls = "bg-ok" if is_good else "bg-bad"
+        svg = ok_svg if is_good else bad_svg
+        return f'<span class="badge-glow {cls}">{svg} {text}</span>'
+
+    maf_req = "Manufacturer's Authorization Form (MAF)" in (st.session_state.bid.get("mandatory_docs", []) if st.session_state.bid else [])
+    
+    mandatory_docs_raw = st.session_state.bid.get("mandatory_docs", []) if st.session_state.bid else []
+    dynamic_docs = [doc for doc in mandatory_docs_raw if "MAF" not in doc.upper() and "MANUFACTURER" not in doc.upper()]
 
     rows = []
-    maf_req = "Manufacturer's Authorization Form (MAF)" in (st.session_state.bid.get("mandatory_docs", []) if st.session_state.bid else [])
     for r in ordered:
         rank_html = get_rank_html(r.rank)
         dq_cls = "dq" if r.disqualified else ""
         bar_cls = "bar dq" if r.disqualified else "bar"
         width = r.score
         nfiles = sum(len(v) for v in [st.session_state.vendor_files.get(r.name, {})])
+        
+        dyn_doc_cells = ""
+        for doc in dynamic_docs:
+            if doc in r.missing_documents:
+                dyn_doc_cells += '<td><span style="color: #ef4444; font-weight:600;">Not Given</span></td>'
+            else:
+                dyn_doc_cells += '<td><span style="color: #10b981; font-weight:600;">Given</span></td>'
+                
+        tech_rec = "Technically NOT Accepted" if r.disqualified or any("Technical" in v.title for v in r.violations) else "Technically Accepted"
+        com_pqc = "Not Meeting Criteria" if any(p.status != "pass" for p in r.pqc) else "Meeting Criteria"
+        com_rec = "Techno-commercially NOT Accepted" if r.disqualified else "Techno-commercially Accepted"
+
         rows.append(f"""
         <tr class="{dq_cls}">
           <td>{rank_html}</td>
           <td><div class="vname">{html.escape(r.name)}</div>
               <div class="vmeta">{nfiles} document(s) submitted</div></td>
-          <td>{status_pill(r.status)}</td>
           <td>{maf_pill(r.maf.status if r.maf else MAF_MISSING, maf_req)}</td>
+          <td><div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#94a3b8; background:rgba(255,255,255,0.05); padding:4px 8px; border-radius:4px; max-width:200px; white-space:normal; overflow:hidden;">{html.escape(r.make_and_model)}</div></td>
+          {dyn_doc_cells}
+          <td>{get_eval_pill(tech_rec, "NOT" not in tech_rec)}</td>
+          <td>{get_eval_pill(com_pqc, "Not " not in com_pqc)}</td>
+          <td>{get_eval_pill(com_rec, "NOT" not in com_rec)}</td>
           <td><div class="scorewrap"><div class="{bar_cls}"><span style="width:{width}%"></span></div>
               <span class="scoreval">{r.score:g}%</span></div></td>
-          <td style="color:var(--muted);font-size:12.5px;max-width:280px;white-space:pre-wrap;line-height:1.5;">{html.escape(r.summary)}</td>
         </tr>""")
+        
+    dyn_headers = "".join(f"<th>{html.escape(doc)}</th>" for doc in dynamic_docs)
+
     st.markdown(f"""
-    <div style="overflow-x: auto; max-width: 100vw; width: 100%;">
-    <table class="lb">
-      <thead><tr><th>Rank</th><th>Vendor</th><th>Status</th><th>MAF</th>
-        <th>Compliance Score</th><th>Key Takeaway</th></tr></thead>
+    <div style="overflow-x: auto; max-width: 100vw; width: 100%; padding-bottom:15px;">
+    <table class="lb" style="white-space: nowrap;">
+      <thead>
+        <tr>
+          <th>Sl. No.</th>
+          <th>Vendor Title</th>
+          <th>MAF</th>
+          <th>Make and model</th>
+          {dyn_headers}
+          <th>Technical Recommendation</th>
+          <th>Commercial PQC</th>
+          <th>Commercial Recommendation</th>
+          <th>Compliance Score</th>
+        </tr>
+      </thead>
       <tbody>{''.join(rows)}</tbody>
     </table>
     </div>
