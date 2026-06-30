@@ -1029,20 +1029,35 @@ class RAGAuditEngine(AuditEngine):
         if not self.llm or not mandatory_docs: return []
         from langchain_core.prompts import PromptTemplate
         from langchain_core.output_parsers import StrOutputParser
+        import json
         
         inventory_str = "\n".join([f"- {i.filename}: {i.doc_type}" for i in inventory])
         
+        vs = self._create_vectorstore(vendor_text, "temp_vendor_search")
+        if vs:
+            unique_chunks = {}
+            for doc_name in mandatory_docs:
+                docs = vs.similarity_search(doc_name, k=2)
+                for d in docs:
+                    unique_chunks[d.page_content] = True
+            context = "\n\n".join(unique_chunks.keys())
+        else:
+            context = vendor_text[:15000]
+            
         prompt = PromptTemplate(
-            input_variables=["mandatory_docs", "inventory_str"],
-            template="""You are a procurement auditor. Check if all mandatory documents are present in the vendor's submission based on the classified inventory.
+            input_variables=["mandatory_docs", "inventory_str", "context"],
+            template="""You are a procurement auditor. Check if all mandatory documents are present in the vendor's submission.
             
             Mandatory Documents Required:
             {mandatory_docs}
             
-            Vendor's Classified Inventory:
+            Vendor's Classified Inventory (Filenames and initial types):
             {inventory_str}
             
-            Match the required documents to the inventory semantically (e.g., "OEM Letter" fulfills "Manufacturer Authorization").
+            Extracted Text Context from vendor's files (use this to verify if merged documents exist):
+            {context}
+            
+            Evaluate if each required document is provided. A document is provided if it is either explicitly listed in the inventory OR its core contents clearly exist within the extracted text context (meaning it was merged into another file).
             List the EXACT NAMES of any Mandatory Documents that are completely missing.
             
             Output JSON exactly like this:
@@ -1055,11 +1070,12 @@ class RAGAuditEngine(AuditEngine):
         import time
         for attempt in range(4):
             try:
-                response = chain.invoke({"mandatory_docs": json.dumps(mandatory_docs), "inventory_str": inventory_str})
-                data = self._extract_json(response)
+                response = chain.invoke({"mandatory_docs": json.dumps(mandatory_docs), "inventory_str": inventory_str, "context": context})
+                data = self._extract_json(response, expected_type=dict)
                 return data.get("missing_documents", [])
-            except Exception:
-                time.sleep(1.5 * (attempt + 1))
+            except Exception as e:
+                if "429" in str(e) or "RateLimit" in type(e).__name__:
+                    time.sleep(1.5 * (attempt + 1))
         return []
 
     def classify_document(self, filename: str, text: str) -> str:
@@ -1097,12 +1113,19 @@ class RAGAuditEngine(AuditEngine):
         from langchain_core.prompts import PromptTemplate
         from langchain_core.output_parsers import StrOutputParser
         
+        vs = self._create_vectorstore(vendor_text, "temp_vendor_search")
+        if vs:
+            docs = vs.similarity_search("Make and Model Brand Equipment", k=4)
+            context = "\n\n".join(d.page_content for d in docs)
+        else:
+            context = vendor_text[:15000]
+            
         prompt = PromptTemplate(
-            input_variables=["text"],
+            input_variables=["context"],
             template="""You are a technical auditor. Extract the exact 'Make and Model' of the primary equipment proposed by the vendor.
             
-            Vendor Text (truncated):
-            {text}
+            Extracted Text Context:
+            {context}
             
             Provide ONLY the Make and Model string and nothing else. If it is not clearly stated, output "Not Given".
             Make and Model:"""
@@ -1111,7 +1134,7 @@ class RAGAuditEngine(AuditEngine):
         import time
         for attempt in range(4):
             try:
-                res = chain.invoke({"text": vendor_text[:15000]}).strip()
+                res = chain.invoke({"context": context}).strip()
                 return res.strip('"\'')
             except Exception as e:
                 if "429" in str(e) or "RateLimit" in type(e).__name__:
