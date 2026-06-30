@@ -1128,6 +1128,7 @@ class RAGAuditEngine(AuditEngine):
             {context}
             
             Provide ONLY the Make and Model string and nothing else. If it is not clearly stated, output "Not Given".
+            Keep the answer extremely concise (under 8 words). Do not repeat yourself.
             Make and Model:"""
         )
         chain = prompt | self.llm | StrOutputParser()
@@ -1135,7 +1136,10 @@ class RAGAuditEngine(AuditEngine):
         for attempt in range(4):
             try:
                 res = chain.invoke({"context": context}).strip()
-                return res.strip('"\'')
+                res = res.strip('"\'')
+                if len(res) > 40:
+                    res = res[:37] + "..."
+                return res
             except Exception as e:
                 if "429" in str(e) or "RateLimit" in type(e).__name__:
                     time.sleep(5)
