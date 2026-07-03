@@ -1878,11 +1878,11 @@ def save_state_to_disk() -> None:
             "vendor_errors": ss.get("vendor_errors", {}),
             "vendor_files_raw": ss.get("vendor_files_raw", {}),
             "vendor_files_pages": ss.get("vendor_files_pages", {}),
-            "bid": None,
-            "results": None,
-            "xai": [],
-            "narrative": None,
-            "processed": False,
+            "bid": ss.get("bid"),
+            "results": ss.get("results"),
+            "xai": ss.get("xai", []),
+            "narrative": ss.get("narrative"),
+            "processed": ss.get("processed", False),
         }
         tmp_file = CACHE_FILE + ".tmp"
         with open(tmp_file, "wb") as f:
