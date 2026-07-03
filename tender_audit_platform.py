@@ -4163,7 +4163,7 @@ def render_document_verification(results: List[VendorResult]) -> None:
                 c2.markdown("<div class='doc-row' style='justify-content:flex-start;'><span class='status-good'>Found</span></div>", unsafe_allow_html=True)
                 with c3:
                     st.markdown("<div class='verify-btn'>", unsafe_allow_html=True)
-                    if st.button("👁 Look", key=f"vd_maf_{r.name}", use_container_width=True):
+                    if st.button("👁 Inspect", key=f"vd_maf_{r.name}", use_container_width=True):
                         show_double_confirm_dialog(r.name, r, "MAF Verification", r.maf.source_file, r.maf.evidence)
                     st.markdown("</div>", unsafe_allow_html=True)
             else:
@@ -4179,7 +4179,7 @@ def render_document_verification(results: List[VendorResult]) -> None:
                     c2.markdown("<div class='doc-row' style='justify-content:flex-start;'><span class='status-good'>Found</span></div>", unsafe_allow_html=True)
                     with c3:
                         st.markdown("<div class='verify-btn'>", unsafe_allow_html=True)
-                        if st.button(f"👁 Look", key=f"vd_doc_{doc}_{r.name}", use_container_width=True):
+                        if st.button(f"👁 Inspect", key=f"vd_doc_{doc}_{r.name}", use_container_width=True):
                             show_double_confirm_dialog(r.name, r, f"Verification for {doc}", "", doc)
                         st.markdown("</div>", unsafe_allow_html=True)
                 else:
