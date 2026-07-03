@@ -982,10 +982,10 @@ class RAGAuditEngine(AuditEngine):
         for req in pqc_reqs:
             query = f"{req['label']} {req.get('key', '')} requirements"
             if vs:
-                relevant_docs = vs.similarity_search(query, k=6)
-                context = "\n\n".join([d.page_content for d in relevant_docs])
+                relevant_docs = vs.similarity_search(query, k=3)
+                context = "\n\n".join([d.page_content for d in relevant_docs])[:4000]
             else:
-                context = vendor_text[:25000]
+                context = vendor_text[:6000]
 
             prompt = PromptTemplate(
                 input_variables=["req", "context"],
@@ -1037,12 +1037,12 @@ class RAGAuditEngine(AuditEngine):
         if vs:
             unique_chunks = {}
             for doc_name in mandatory_docs:
-                docs = vs.similarity_search(doc_name, k=5)
+                docs = vs.similarity_search(doc_name, k=3)
                 for d in docs:
                     unique_chunks[d.page_content] = True
-            context = "\n\n".join(unique_chunks.keys())
+            context = "\n\n".join(unique_chunks.keys())[:8000]
         else:
-            context = vendor_text[:20000]
+            context = vendor_text[:8000]
             
         prompt = PromptTemplate(
             input_variables=["mandatory_docs", "inventory_str", "context"],
@@ -1115,10 +1115,10 @@ class RAGAuditEngine(AuditEngine):
         
         vs = self._create_vectorstore(vendor_text, "temp_vendor_search")
         if vs:
-            docs = vs.similarity_search("Make Model Brand Manufacturer Equipment Series", k=10)
-            context = "\n\n".join(d.page_content for d in docs)
+            docs = vs.similarity_search("Make Model Brand Manufacturer Equipment Series", k=5)
+            context = "\n\n".join(d.page_content for d in docs)[:4000]
         else:
-            context = vendor_text[:20000]
+            context = vendor_text[:6000]
             
         prompt = PromptTemplate(
             input_variables=["context"],
@@ -1189,12 +1189,12 @@ class RAGAuditEngine(AuditEngine):
         if vs:
             for s in specs:
                 query = f"{s.get('label', '')} {s.get('param', '')}"
-                docs = vs.similarity_search(query, k=3)
+                docs = vs.similarity_search(query, k=2)
                 for d in docs:
                     unique_chunks[d.page_content] = True
-            context = "\n\n".join(unique_chunks.keys())
+            context = "\n\n".join(unique_chunks.keys())[:10000]
         else:
-            context = vendor_text[:25000]
+            context = vendor_text[:12000]
 
         prompt = PromptTemplate(
             input_variables=["specs", "context"],
