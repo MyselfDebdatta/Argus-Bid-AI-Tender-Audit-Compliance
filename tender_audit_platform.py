@@ -3893,108 +3893,64 @@ def render_leaderboard(results: List[VendorResult]) -> None:
     mandatory_docs_raw = st.session_state.bid.get("mandatory_docs", []) if st.session_state.bid else []
     dynamic_docs = [doc for doc in mandatory_docs_raw if "MAF" not in doc.upper() and "MANUFACTURER" not in doc.upper()]
 
-    st.markdown('<span id="lb-hook"></span>', unsafe_allow_html=True)
-    st.markdown("""
-    <style>
-    /* Target the columns container directly following the hook */
-    [data-testid="stHorizontalBlock"] {
-        flex-wrap: nowrap !important;
-        overflow-x: auto !important;
-        min-width: 2200px !important;
-        border-bottom: 1px solid rgba(255,255,255,0.05);
-        align-items: flex-start;
-        padding-top: 10px;
-        padding-bottom: 10px;
-    }
-    [data-testid="stHorizontalBlock"] > [data-testid="column"] {
-        min-width: 140px !important;
-    }
-    /* Specific styling for the tiny Look buttons inside these columns */
-    [data-testid="stHorizontalBlock"] .stButton>button {
-        padding: 0px 8px !important;
-        min-height: 28px !important;
-        height: 28px !important;
-        font-size: 11.5px !important;
-        background: rgba(16, 185, 129, 0.1) !important;
-        border: 1px solid rgba(16, 185, 129, 0.3) !important;
-        color: #10b981 !important;
-        border-radius: 4px !important;
-    }
-    [data-testid="stHorizontalBlock"] .stButton>button:hover {
-        background: rgba(16, 185, 129, 0.2) !important;
-        border-color: #10b981 !important;
-        color: white !important;
-    }
-    .th-hdr {
-        font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #8B9BB4; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    cols_spec = [0.6, 1.8, 1.6, 1.8] + [1.4]*len(dynamic_docs) + [1.8, 1.8, 1.8, 1.5, 2.0]
-    
-    with st.container():
-        # Headers
-        header_cols = st.columns(cols_spec)
-        headers = ["Sl. No.", "Vendor Title", "MAF", "Make and model"] + [html.escape(d) for d in dynamic_docs] + ["Technical Recommendation", "Commercial PQC", "Commercial Recommendation", "Compliance Score", "Key Takeaway"]
-        for col, text in zip(header_cols, headers):
-            col.markdown(f"<div class='th-hdr'>{text}</div>", unsafe_allow_html=True)
-            
-        # Rows
-        for r in ordered:
-            cols = st.columns(cols_spec)
-            dq_cls = "dq" if r.disqualified else ""
-            bar_cls = "bar dq" if r.disqualified else "bar"
-            width = r.score
-            nfiles = sum(len(v) for v in [st.session_state.vendor_files.get(r.name, {})])
-            
-            # Rank
-            cols[0].markdown(get_rank_html(r.rank), unsafe_allow_html=True)
-            
-            # Vendor
-            cols[1].markdown(f"<div class='vname' style='opacity:{0.5 if r.disqualified else 1}'>{html.escape(r.name)}</div><div class='vmeta'>{nfiles} doc(s)</div>", unsafe_allow_html=True)
-            
-            # MAF
-            maf_status = maf_pill(r.maf.status if r.maf else MAF_MISSING, maf_req)
-            if r.maf and r.maf.status != MAF_MISSING:
-                cols[2].markdown(maf_status, unsafe_allow_html=True)
-                if cols[2].button("👁 Look", key=f"look_maf_{r.name}"):
-                    show_double_confirm_dialog(r.name, r, "MAF Verification", r.maf.source_file, r.maf.evidence)
+    rows = []
+    for r in ordered:
+        rank_html = get_rank_html(r.rank)
+        dq_cls = "dq" if r.disqualified else ""
+        bar_cls = "bar dq" if r.disqualified else "bar"
+        width = r.score
+        nfiles = sum(len(v) for v in [st.session_state.vendor_files.get(r.name, {})])
+        
+        dyn_doc_cells = ""
+        for doc in dynamic_docs:
+            if doc in r.missing_documents:
+                dyn_doc_cells += '<td><span style="color: #ef4444; font-weight:600;">Not Given</span></td>'
             else:
-                cols[2].markdown(maf_status, unsafe_allow_html=True)
+                dyn_doc_cells += '<td><span style="color: #10b981; font-weight:600;">Given</span></td>'
                 
-            # Make & Model
-            cols[3].markdown(f"<div style=\"font-family:'JetBrains Mono', monospace; font-size:12px; color:#94a3b8; background:rgba(255,255,255,0.05); padding:4px 8px; border-radius:4px; max-width:200px; white-space:normal;\">{html.escape(r.make_and_model)}</div>", unsafe_allow_html=True)
-            
-            # Dynamic Docs
-            idx = 4
-            for doc in dynamic_docs:
-                if doc in r.missing_documents:
-                    cols[idx].markdown('<span style="color: #ef4444; font-weight:600;">Not Given</span>', unsafe_allow_html=True)
-                else:
-                    cols[idx].markdown('<span style="color: #10b981; font-weight:600;">Given</span>', unsafe_allow_html=True)
-                    if cols[idx].button("👁 Look", key=f"look_doc_{doc}_{r.name}"):
-                        show_double_confirm_dialog(r.name, r, f"Verification for {doc}", "", doc)
-                idx += 1
-                
-            # Recs
-            tech_rec = "Technically NOT Accepted" if r.score < 50 else "Technically Accepted"
-            com_pqc = "Not Meeting Criteria" if any(not p.passed for p in r.pqc) else "Meeting Criteria"
-            com_rec = "Techno-commercially NOT Accepted" if r.disqualified else "Techno-commercially Accepted"
-            
-            cols[idx].markdown(get_eval_pill(tech_rec, "NOT" not in tech_rec), unsafe_allow_html=True)
-            idx += 1
-            cols[idx].markdown(get_eval_pill(com_pqc, "Not " not in com_pqc), unsafe_allow_html=True)
-            idx += 1
-            cols[idx].markdown(get_eval_pill(com_rec, "NOT" not in com_rec), unsafe_allow_html=True)
-            idx += 1
-            
-            # Score
-            cols[idx].markdown(f"<div class='scorewrap'><div class='{bar_cls}'><span style='width:{width}%'></span></div><span class='scoreval'>{r.score:g}%</span></div>", unsafe_allow_html=True)
-            idx += 1
-            
-            # Summary
-            cols[idx].markdown(f"<div style='color:var(--muted);font-size:12.5px;max-width:280px;white-space:normal;line-height:1.5;'>{html.escape(r.summary)}</div>", unsafe_allow_html=True)
+        tech_rec = "Technically NOT Accepted" if r.score < 50 else "Technically Accepted"
+        com_pqc = "Not Meeting Criteria" if any(not p.passed for p in r.pqc) else "Meeting Criteria"
+        com_rec = "Techno-commercially NOT Accepted" if r.disqualified else "Techno-commercially Accepted"
+
+        rows.append(f"""
+        <tr class="{dq_cls}">
+          <td>{rank_html}</td>
+          <td><div class="vname">{html.escape(r.name)}</div>
+              <div class="vmeta">{nfiles} document(s) submitted</div></td>
+          <td>{maf_pill(r.maf.status if r.maf else MAF_MISSING, maf_req)}</td>
+          <td><div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#94a3b8; background:rgba(255,255,255,0.05); padding:4px 8px; border-radius:4px; max-width:200px; white-space:normal; overflow:hidden;">{html.escape(r.make_and_model)}</div></td>
+          {dyn_doc_cells}
+          <td>{get_eval_pill(tech_rec, "NOT" not in tech_rec)}</td>
+          <td>{get_eval_pill(com_pqc, "Not " not in com_pqc)}</td>
+          <td>{get_eval_pill(com_rec, "NOT" not in com_rec)}</td>
+          <td><div class="scorewrap"><div class="{bar_cls}"><span style="width:{width}%"></span></div>
+              <span class="scoreval">{r.score:g}%</span></div></td>
+          <td style="color:var(--muted);font-size:12.5px;max-width:280px;white-space:normal;overflow:hidden;line-height:1.5;">{html.escape(r.summary)}</td>
+        </tr>""")
+        
+    dyn_headers = "".join(f"<th>{html.escape(doc)}</th>" for doc in dynamic_docs)
+
+    st.markdown(f"""
+    <div style="overflow-x: auto; max-width: 100vw; width: 100%; padding-bottom:15px;">
+    <table class="lb" style="white-space: nowrap;">
+      <thead>
+        <tr>
+          <th>Sl. No.</th>
+          <th>Vendor Title</th>
+          <th>MAF</th>
+          <th>Make and model</th>
+          {dyn_headers}
+          <th>Technical Recommendation</th>
+          <th>Commercial PQC</th>
+          <th>Commercial Recommendation</th>
+          <th>Compliance Score</th>
+          <th>Key Takeaway</th>
+        </tr>
+      </thead>
+      <tbody>{''.join(rows)}</tbody>
+    </table>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def render_xai(xai: List[str], narrative: Optional[str]) -> None:
@@ -4110,6 +4066,59 @@ def render_violations(r: VendorResult) -> str:
         </div>"""
     return out
 
+
+def render_document_verification(results: List[VendorResult]) -> None:
+    ordered = sorted(results, key=lambda r: (r.disqualified, -(r.score)))
+    maf_req = "Manufacturer's Authorization Form (MAF)" in (st.session_state.bid.get("mandatory_docs", []) if st.session_state.bid else [])
+    mandatory_docs_raw = st.session_state.bid.get("mandatory_docs", []) if st.session_state.bid else []
+    dynamic_docs = [doc for doc in mandatory_docs_raw if "MAF" not in doc.upper() and "MANUFACTURER" not in doc.upper()]
+
+    st.markdown("""
+    <style>
+    .verify-btn button {
+        padding: 4px 12px !important;
+        min-height: 32px !important;
+        font-size: 13px !important;
+        background: rgba(56, 189, 248, 0.1) !important;
+        border: 1px solid rgba(56, 189, 248, 0.3) !important;
+        color: #38bdf8 !important;
+        border-radius: 6px !important;
+    }
+    .verify-btn button:hover {
+        background: rgba(56, 189, 248, 0.2) !important;
+        color: white !important;
+    }
+    .doc-row {
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    for r in ordered:
+        with st.expander(f"🔎 Document Verification: {r.name}"):
+            cols = st.columns([0.7, 0.3])
+            cols[0].markdown("<div class='doc-row'><b>Manufacturer's Authorization Form (MAF)</b></div>", unsafe_allow_html=True)
+            if r.maf and r.maf.status != MAF_MISSING:
+                with cols[1]:
+                    st.markdown("<div class='verify-btn'>", unsafe_allow_html=True)
+                    if st.button("👁 Look (MAF)", key=f"vd_maf_{r.name}", use_container_width=True):
+                        show_double_confirm_dialog(r.name, r, "MAF Verification", r.maf.source_file, r.maf.evidence)
+                    st.markdown("</div>", unsafe_allow_html=True)
+            else:
+                cols[1].markdown("<div class='doc-row' style='color:#ef4444;'>Not Given</div>", unsafe_allow_html=True)
+                
+            for doc in dynamic_docs:
+                cols = st.columns([0.7, 0.3])
+                cols[0].markdown(f"<div class='doc-row'>{html.escape(doc)}</div>", unsafe_allow_html=True)
+                if doc not in r.missing_documents:
+                    with cols[1]:
+                        st.markdown("<div class='verify-btn'>", unsafe_allow_html=True)
+                        if st.button(f"👁 Look", key=f"vd_doc_{doc}_{r.name}", use_container_width=True):
+                            show_double_confirm_dialog(r.name, r, f"Verification for {doc}", "", doc)
+                        st.markdown("</div>", unsafe_allow_html=True)
+                else:
+                    cols[1].markdown("<div class='doc-row' style='color:#ef4444;'>Not Given</div>", unsafe_allow_html=True)
 
 def render_drawers(results: List[VendorResult]) -> None:
     ordered = sorted(results, key=lambda r: (r.disqualified, -(r.score)))
@@ -4462,11 +4471,14 @@ def main() -> None:
 
     eyebrow("02", "Compliance Leaderboard")
     render_leaderboard(ss.results)
+    
+    eyebrow("03", "Manual Document Verification")
+    render_document_verification(ss.results)
 
-    eyebrow("03", "Explainable Ranking (XAI)")
+    eyebrow("04", "Explainable Ranking (XAI)")
     render_xai(ss.xai, ss.narrative)
 
-    eyebrow("04", "Vendor Audit Deep-Dive")
+    eyebrow("05", "Vendor Audit Deep-Dive")
     render_drawers(ss.results)
     
     pass # Double-Confirm Source removed from here
