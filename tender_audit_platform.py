@@ -662,10 +662,6 @@ class AuditEngine:
         r.preferred_score = (pref_match / len(pref) * 30.0) if pref else 0.0
         
         base_score = r.mandatory_score + r.preferred_score
-        
-        if r.disqualified:
-            penalty = len(r.violations) * 15
-            base_score = max(0.0, base_score - penalty)
             
         r.score = round(base_score, 1)
 
@@ -2336,7 +2332,7 @@ def show_double_confirm_dialog(vendor_name: str, r: VendorResult, title: str, fi
         try:
             with pdfplumber.open(io.BytesIO(raw_bytes)) as pdf:
                 page = pdf.pages[found_page]
-                im = page.to_image(resolution=72)
+                im = page.to_image(resolution=200)
                 st.image(im.original, use_container_width=True)
                 del im
             import gc
@@ -3858,15 +3854,15 @@ def render_kpis(results: List[VendorResult]) -> None:
     total = len(results)
     responsive = [r for r in results if not r.disqualified]
     dq = total - len(responsive)
-    top = max((r.score for r in responsive), default=0.0)
-    avg = round(sum(r.score for r in responsive) / len(responsive), 1) if responsive else 0.0
+    top = max((r.score for r in results), default=0.0)
+    avg = f"{round(sum(r.score for r in responsive) / len(responsive), 1):g}%" if responsive else "N/A"
     st.markdown(f"""
 <div class="kpis">
 <div class="kpi blue"><div class="v">{total}</div><div class="l">Vendors Audited</div></div>
 <div class="kpi green"><div class="v">{len(responsive)}</div><div class="l">Responsive</div></div>
 <div class="kpi red"><div class="v">{dq}</div><div class="l">Disqualified</div></div>
 <div class="kpi white"><div class="v">{top:g}%</div><div class="l">Top Score</div></div>
-<div class="kpi amber"><div class="v">{avg:g}%</div><div class="l">Avg (Responsive)</div></div>
+<div class="kpi amber"><div class="v">{avg}</div><div class="l">Avg (Responsive)</div></div>
 </div>
     """, unsafe_allow_html=True)
 
@@ -4078,13 +4074,13 @@ def render_document_verification(results: List[VendorResult]) -> None:
     /* Expander UI Override */
     div[data-testid="stExpander"] {
         border: 1px solid rgba(148, 163, 184, 0.15) !important;
-        border-radius: 8px !important;
+        border-radius: 2px !important;
         background: rgba(15, 23, 42, 0.4) !important;
         margin-bottom: 12px !important;
     }
     div[data-testid="stExpander"] summary {
         background: rgba(255, 255, 255, 0.02) !important;
-        border-radius: 8px !important;
+        border-radius: 2px !important;
     }
     div[data-testid="stExpander"] summary p {
         font-family: 'JetBrains Mono', monospace !important;
@@ -4103,7 +4099,7 @@ def render_document_verification(results: List[VendorResult]) -> None:
         background: linear-gradient(90deg, rgba(56, 189, 248, 0.15), rgba(56, 189, 248, 0.05)) !important;
         border: 1px solid rgba(56, 189, 248, 0.3) !important;
         color: #38bdf8 !important;
-        border-radius: 6px !important;
+        border-radius: 2px !important;
         box-shadow: 0 0 10px rgba(56, 189, 248, 0.1) !important;
         text-transform: uppercase;
         margin-top: 4px;
@@ -4155,7 +4151,7 @@ def render_document_verification(results: List[VendorResult]) -> None:
     """, unsafe_allow_html=True)
 
     for r in ordered:
-        with st.expander(f"🔎 Document Verification: {r.name}"):
+        with st.expander(f"Document Verification: {r.name}"):
             # MAF Row
             c1, c2, c3 = st.columns([0.6, 0.2, 0.2])
             c1.markdown("<div class='doc-row'><span class='doc-name'>Manufacturer's Authorization Form (MAF)</span></div>", unsafe_allow_html=True)
@@ -4163,7 +4159,7 @@ def render_document_verification(results: List[VendorResult]) -> None:
                 c2.markdown("<div class='doc-row' style='justify-content:flex-start;'><span class='status-good'>Found</span></div>", unsafe_allow_html=True)
                 with c3:
                     st.markdown("<div class='verify-btn'>", unsafe_allow_html=True)
-                    if st.button("👁 Inspect", key=f"vd_maf_{r.name}", use_container_width=True):
+                    if st.button("Inspect", key=f"vd_maf_{r.name}", use_container_width=True):
                         show_double_confirm_dialog(r.name, r, "MAF Verification", r.maf.source_file, r.maf.evidence)
                     st.markdown("</div>", unsafe_allow_html=True)
             else:
@@ -4179,7 +4175,7 @@ def render_document_verification(results: List[VendorResult]) -> None:
                     c2.markdown("<div class='doc-row' style='justify-content:flex-start;'><span class='status-good'>Found</span></div>", unsafe_allow_html=True)
                     with c3:
                         st.markdown("<div class='verify-btn'>", unsafe_allow_html=True)
-                        if st.button(f"👁 Inspect", key=f"vd_doc_{doc}_{r.name}", use_container_width=True):
+                        if st.button(f"Inspect", key=f"vd_doc_{doc}_{r.name}", use_container_width=True):
                             show_double_confirm_dialog(r.name, r, f"Verification for {doc}", "", doc)
                         st.markdown("</div>", unsafe_allow_html=True)
                 else:
