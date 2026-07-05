@@ -1270,7 +1270,7 @@ class RAGAuditEngine(AuditEngine):
                     time.sleep(5)
         return None
 
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def get_engine() -> AuditEngine:
     return RAGAuditEngine()
 
