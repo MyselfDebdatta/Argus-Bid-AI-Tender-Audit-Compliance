@@ -875,7 +875,7 @@ class RAGAuditEngine(AuditEngine):
         from langchain_core.output_parsers import StrOutputParser
         
         # Bypass vector fragmentation to ensure contiguous extraction of tabular specs
-        context = bid_text[:25000]
+        context = bid_text[:15000]
 
         prompt = PromptTemplate(
             input_variables=["context"],
@@ -912,7 +912,7 @@ class RAGAuditEngine(AuditEngine):
             except Exception as e:
                 print(f"parse_master_bid failed (Attempt {attempt+1}): {e}")
                 if "429" in str(e) or "RateLimit" in type(e).__name__:
-                    time.sleep(20)
+                    time.sleep(min(2 ** attempt, 8))
                 else:
                     time.sleep(5)
                 
@@ -974,62 +974,33 @@ class RAGAuditEngine(AuditEngine):
                     return MAFResult(status=MAF_INVALID, evidence=f"Invalid MAF. {data.get('reasoning')}\nExtracted: {data.get('extracted_snippet')}", source_file=src)
             except Exception as e:
                 if "429" in str(e) or "RateLimit" in type(e).__name__:
-                    time.sleep(20)
+                    time.sleep(min(2 ** attempt, 8))
         return MAFResult(status=MAF_INVALID, evidence="Failed to evaluate MAF: Persistent LLM failure.", source_file="")
 
     def evaluate_pqc(self, pqc_reqs: List[Dict[str, Any]], vendor_text: str) -> List[PQCResult]:
-        if not self.llm: return []
-        results = []
-        from langchain_core.prompts import PromptTemplate
-        from langchain_core.output_parsers import StrOutputParser
-        
-        vs = self._create_vectorstore(vendor_text, "vendor_pqc")
-
-        for req in pqc_reqs:
-            query = f"{req['label']} {req.get('key', '')} requirements"
-            if vs:
-                relevant_docs = vs.similarity_search(query, k=3)
-                context = "\n\n".join([d.page_content for d in relevant_docs])[:4000]
-            else:
-                context = vendor_text[:6000]
-
-            prompt = PromptTemplate(
-                input_variables=["req", "context"],
-                template="""You are verifying a vendor's pre-qualification criteria.
-                Criterion: {req}
-                
-                Vendor Text:
-                {context}
-                
-                Extract the vendor's provided value for this criterion.
-                Output JSON exactly like this:
-                {{
-                    "provided_value": "The specific value found (e.g. '12 years', 'Registered', or '500 Crores') or '[NOT FOUND]'",
-                    "meets_threshold": true/false
-                }}
-                """
-            )
-            chain = prompt | self.llm | StrOutputParser()
-            import time
-            success = False
-            for attempt in range(4):
-                try:
-                    response = chain.invoke({"req": json.dumps(req), "context": context})
-                    data = self._extract_json(response)
-                    provided = data.get("provided_value", "[NOT FOUND]")
-                    passed = data.get("meets_threshold", False)
-                    req_val = f"≥ {req.get('threshold', '')} {req.get('unit', '')}" if req.get('threshold') else "Required"
-                    results.append(PQCResult(req["label"], req_val, provided, passed, req.get("section", "")))
-                    success = True
-                    break
-                except Exception as e:
-                    if "429" in str(e) or "RateLimit" in type(e).__name__:
-                        time.sleep(20)
-            if not success:
-                req_val = f"≥ {req.get('threshold', '')} {req.get('unit', '')}" if req.get('threshold') else "Required"
-                results.append(PQCResult(req["label"], req_val, "[ERROR]", False, req.get("section", "")))
-                
-        return results
+        if not self.llm or not pqc_reqs: return []
+        context = vendor_text[:6000]
+        specs_json = json.dumps(pqc_reqs)
+        prompt = f"""Check if vendor meets ALL pre-qualification criteria.
+        Criteria (JSON): {specs_json}
+        Vendor text: {context}
+        Return ONLY a JSON array — one object per criterion in the exact same order:
+        [{{"label":"...","provided_value":"...","meets_threshold":true/false}}]
+        """
+        import time
+        for attempt in range(4):
+            try:
+                resp = self.llm.invoke(prompt).content
+                data = self._extract_json(resp, expected_type=list)
+                results = []
+                for req, item in zip(pqc_reqs, data):
+                    req_val = f"≥ {req.get('threshold')} {req.get('unit','')}" if req.get('threshold') else "Required"
+                    results.append(PQCResult(req['label'], req_val, item.get('provided_value','[NOT FOUND]'), item.get('meets_threshold', False), req.get('section','')))
+                return results
+            except Exception as e:
+                wait = min(2 ** attempt, 8)
+                time.sleep(wait)
+        return []
 
     def check_missing_docs(self, mandatory_docs: List[str], vendor_text: str, inventory: List[InventoryItem]) -> List[str]:
         if not self.llm or not mandatory_docs: return []
@@ -1048,7 +1019,7 @@ class RAGAuditEngine(AuditEngine):
                     unique_chunks[d.page_content] = True
             context = "\n\n".join(unique_chunks.keys())[:8000]
         else:
-            context = vendor_text[:8000]
+            context = vendor_text[:5000]
             
         prompt = PromptTemplate(
             input_variables=["mandatory_docs", "inventory_str", "context"],
@@ -1081,7 +1052,7 @@ class RAGAuditEngine(AuditEngine):
                 return data.get("missing_documents", [])
             except Exception as e:
                 if "429" in str(e) or "RateLimit" in type(e).__name__:
-                    time.sleep(1.5 * (attempt + 1))
+                    time.sleep(min(2 ** attempt, 8))
         return []
 
     def classify_document(self, filename: str, text: str) -> str:
@@ -1111,7 +1082,7 @@ class RAGAuditEngine(AuditEngine):
                 return doc_type.strip('"\'')
             except Exception as e:
                 if "429" in str(e) or "RateLimit" in type(e).__name__:
-                    time.sleep(20)
+                    time.sleep(min(2 ** attempt, 8))
         return "Unclassified Document"
 
     def extract_make_and_model(self, vendor_text: str) -> str:
@@ -1179,7 +1150,7 @@ class RAGAuditEngine(AuditEngine):
                 data = self._extract_json(response)
                 return data.get("deviations", [])[:6]
             except Exception:
-                time.sleep(1.5 * (attempt + 1))
+                time.sleep(min(2 ** attempt, 8))
         return []
 
     def extract_specs_batch(self, specs: List[Dict[str, Any]], vendor_text: str, mandatory: bool) -> List[SpecResult]:
@@ -1190,17 +1161,13 @@ class RAGAuditEngine(AuditEngine):
         from langchain_core.output_parsers import StrOutputParser
 
         vs = self._create_vectorstore(vendor_text, "temp_vendor_search")
-        
-        unique_chunks = {}
         if vs:
-            for s in specs:
-                query = f"{s.get('label', '')} {s.get('param', '')}"
-                docs = vs.similarity_search(query, k=2)
-                for d in docs:
-                    unique_chunks[d.page_content] = True
-            context = "\n\n".join(unique_chunks.keys())[:10000]
+            combined_query = ' '.join(f"{s.get('label', '')} {s.get('param', '')}" for s in specs)
+            docs = vs.similarity_search(combined_query, k=6)
+            unique_chunks = {d.page_content: True for d in docs}
+            context = "\n\n".join(unique_chunks.keys())[:6000]
         else:
-            context = vendor_text[:12000]
+            context = vendor_text[:6000]
 
         prompt = PromptTemplate(
             input_variables=["specs", "context"],
@@ -1260,7 +1227,7 @@ class RAGAuditEngine(AuditEngine):
             except Exception as e:
                 print(f"extract_specs_batch failed on attempt {attempt+1}: {e}")
                 if "429" in str(e) or "RateLimit" in type(e).__name__:
-                    time.sleep(25)
+                    time.sleep(min(2 ** attempt, 8))
                 else:
                     time.sleep(5)
                 
@@ -1298,11 +1265,12 @@ class RAGAuditEngine(AuditEngine):
                 return chain.invoke({"context": json.dumps(ctx, indent=2)})
             except Exception as e:
                 if "429" in str(e) or "RateLimit" in type(e).__name__:
-                    time.sleep(20)
+                    time.sleep(min(2 ** attempt, 8))
                 else:
                     time.sleep(5)
         return None
 
+@st.cache_resource
 def get_engine() -> AuditEngine:
     return RAGAuditEngine()
 
