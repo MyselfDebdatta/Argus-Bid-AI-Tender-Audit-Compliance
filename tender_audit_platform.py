@@ -4422,7 +4422,7 @@ def render_document_verification(results: List[VendorResult]) -> None:
     /* Expander UI Override */
     div[data-testid="stExpander"] {
         border: 1px solid rgba(148, 163, 184, 0.15) !important;
-        border-radius: 4px !important;
+        border-radius: 0px !important;
         background: rgba(15, 23, 42, 0.4) !important;
         margin-bottom: 16px !important;
         box-shadow: 0 4px 15px rgba(0,0,0,0.1);
@@ -4430,7 +4430,7 @@ def render_document_verification(results: List[VendorResult]) -> None:
     }
     div[data-testid="stExpander"] summary {
         background: rgba(255, 255, 255, 0.02) !important;
-        border-radius: 4px !important;
+        border-radius: 0px !important;
         padding: 12px 16px !important;
     }
     div[data-testid="stExpander"] summary p {
@@ -4453,7 +4453,7 @@ def render_document_verification(results: List[VendorResult]) -> None:
         border-radius: 2px !important;
         box-shadow: 0 0 10px rgba(56, 189, 248, 0.1) !important;
         text-transform: uppercase;
-        margin-top: 4px;
+        margin-top: -10px !important;
         transition: all 0.2s ease !important;
     }
     .verify-btn button:hover {
@@ -4533,7 +4533,7 @@ def render_drawers(results: List[VendorResult]) -> None:
     /* Expander UI Override */
     div[data-testid="stExpander"] {
         border: 1px solid rgba(148, 163, 184, 0.15) !important;
-        border-radius: 4px !important;
+        border-radius: 0px !important;
         background: rgba(15, 23, 42, 0.4) !important;
         margin-bottom: 16px !important;
         box-shadow: 0 4px 15px rgba(0,0,0,0.1);
@@ -4541,7 +4541,7 @@ def render_drawers(results: List[VendorResult]) -> None:
     }
     div[data-testid="stExpander"] summary {
         background: rgba(255, 255, 255, 0.02) !important;
-        border-radius: 4px !important;
+        border-radius: 0px !important;
         padding: 12px 16px !important;
     }
     div[data-testid="stExpander"] summary p {
@@ -4564,7 +4564,7 @@ def render_drawers(results: List[VendorResult]) -> None:
         border-radius: 2px !important;
         box-shadow: 0 0 10px rgba(56, 189, 248, 0.1) !important;
         text-transform: uppercase;
-        margin-top: 4px;
+        margin-top: -10px !important;
         transition: all 0.2s ease !important;
     }
     .verify-btn button:hover {
