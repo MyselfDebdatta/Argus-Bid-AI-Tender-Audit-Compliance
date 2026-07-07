@@ -995,7 +995,6 @@ class RAGAuditEngine(AuditEngine):
             "order": [
                 # Extract order value in lakhs from order line
                 r"(?i)(?:order|supply|contract)\s*[:\-]?\s*.{0,60}?(?:inr|rs\.?)\s*([\d,]+(?:\.\d+)?)\s*(?:lakhs?|lakh|lac)",
-                r"(?i)(?:inr|rs\.?)\s*([\d,]+(?:\.\d+)?)\s*(?:lakhs?|lakh|lac)",
                 r"(?i)(?:successfully\s*)?(?:supplied|completed|executed|delivered)\D{0,40}?(\d+)\s*(?:similar\s*)?orders?",
                 r"(?i)(\d+)\s*(?:similar\s*)?orders?\s*(?:of|for|worth|valued)",
             ],
@@ -1102,14 +1101,25 @@ class RAGAuditEngine(AuditEngine):
         # ── PASS 2: LLM for unresolved PQC only ─────────────────────
         if unresolved and self.llm:
             unresolved_reqs = [pqc_reqs[i] for i in unresolved]
-            context = vendor_text[:4000]
+            
+            # Build Context with Vectorstore!
+            vs = self._create_vectorstore(vendor_text, "vendor_pqc")
+            if vs:
+                unique_chunks = {}
+                for req in unresolved_reqs:
+                    query = f"{req.get('label', '')} {req.get('threshold', '')} {req.get('unit', '')}"
+                    docs = vs.similarity_search(query, k=3)
+                    for d in docs: unique_chunks[d.page_content] = True
+                context = "\n\n".join(unique_chunks.keys())[:10000]
+            else:
+                context = vendor_text[:6000]
+
             specs_json = json.dumps(unresolved_reqs)
             prompt = (
-                "Check if the vendor meets these pre-qualification criteria.\n"
-                f"Criteria: {specs_json}\n"
-                f"Vendor text:\n{context}\n"
-                "Return ONLY a JSON array in the same order:\n"
-                "[{\"label\":\"...\",\"provided_value\":\"...\",\"meets_threshold\":true/false}]"
+                "Check the vendor's pre-qualification criteria in the context.\n"
+                f"Criteria: {specs_json}\n\nContext:\n{context}\n\n"
+                "Return ONLY a JSON array in the same order, extracting the exact value they provided. If not found, use \"[NOT FOUND]\":\n"
+                "[{\"label\":\"...\",\"provided_value\":\"...\"}]"
             )
             for attempt in range(3):
                 try:
@@ -1117,14 +1127,26 @@ class RAGAuditEngine(AuditEngine):
                     data = self._extract_json(resp, expected_type=list)
                     if not isinstance(data, list):
                         raise ValueError("Expected list")
-                    for i, (req, item) in zip(unresolved, zip(unresolved_reqs, data)):
+                        
+                    extracted_map = {item.get("label", ""): item for item in data if isinstance(item, dict)}
+                    
+                    for i, req in zip(unresolved, unresolved_reqs):
+                        label = req.get("label", "")
                         threshold = req.get("threshold")
                         unit = req.get("unit", "")
                         req_val = f"≥ {threshold} {unit}".strip() if threshold is not None else "Required"
+                        
+                        ext = extracted_map.get(label, {})
+                        provided = ext.get("provided_value", "[NOT FOUND]")
+                        
+                        passed = False
+                        if provided != "[NOT FOUND]":
+                            passed = self._regex_judge_pqc(provided, threshold, unit)
+                            
                         results[i] = PQCResult(
-                            req["label"], req_val,
-                            item.get("provided_value", "[NOT FOUND]"),
-                            item.get("meets_threshold", False),
+                            label, req_val,
+                            provided,
+                            passed,
                             req.get("section", "")
                         )
                     break
@@ -1491,11 +1513,10 @@ class RAGAuditEngine(AuditEngine):
 
             prompt_text = (
                 "You are checking a vendor's technical submission. "
-                "For each spec below, find the vendor's stated value in the context. "
+                "For each spec below, extract the exact value the vendor stated in the context. "
                 "If not found, use \"[DATA LACKING]\". "
                 "Output ONLY a raw JSON array, same order as input, no explanation:\n"
-                "[{\"label\":\"...\",\"provided_value\":\"...\","
-                "\"status\":\"match|fail|lacking\"}]\n\n"
+                "[{\"label\":\"...\",\"provided_value\":\"...\"}]\n\n"
                 f"Specs: {specs_payload}\n\nContext:\n{context}"
             )
 
@@ -1514,12 +1535,20 @@ class RAGAuditEngine(AuditEngine):
                         req_val = s.get("required_value", "")
                         unit = s.get("unit", "")
                         req_str = f"{req_val} {unit}".strip()
+                        
                         ext = extracted_map.get(label, {})
+                        provided = ext.get("provided_value", "[DATA LACKING]")
+                        
+                        if provided != "[DATA LACKING]":
+                            status = self._regex_judge_spec(provided, req_val, unit)
+                        else:
+                            status = "lacking"
+                            
                         results[i] = SpecResult(
                             param=label,
                             required=req_str,
-                            provided=ext.get("provided_value", "[DATA LACKING]"),
-                            status=ext.get("status", "lacking"),
+                            provided=provided,
+                            status=status,
                             mandatory=mandatory,
                         )
                     break  # success — stop retrying
