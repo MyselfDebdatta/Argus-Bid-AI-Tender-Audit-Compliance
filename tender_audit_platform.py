@@ -773,7 +773,6 @@ class RAGAuditEngine(AuditEngine):
     def __init__(self, model_name: str = "llama3"):
         super().__init__()
         self.model_name = model_name
-        self.llm = None
         self.embeddings = None
         self.vectorstores = {}
         self.text_splitter = None
