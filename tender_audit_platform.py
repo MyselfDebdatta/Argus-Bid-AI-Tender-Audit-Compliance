@@ -1001,6 +1001,7 @@ class RAGAuditEngine(AuditEngine):
             "order": [
                 # Extremely strict order value pattern (let LLM handle the rest)
                 r"(?i)(?:order\s*value|value\s*of\s*orders?)\s*[:\-]?\s*(?:inr|rs\.?)\s*([\d,]+(?:\.\d+)?)\s*(?:lakhs?|lakh|lac)",
+                r"(?i)(?:order\s*value|value\s*of\s*orders?)\s*[:\-]?\s*([\d,]+(?:\.\d+)?)\s*(?:inr|rs\.?)",
                 r"(?i)(?:successfully\s*)?(?:supplied|completed|executed|delivered)\D{0,40}?(\d+)\s*(?:similar\s*)?orders?",
                 r"(?i)(\d+)\s*(?:similar\s*)?orders?\s*(?:of|for|worth|valued)",
             ],
@@ -1107,7 +1108,7 @@ class RAGAuditEngine(AuditEngine):
                 unique_chunks = {}
                 sources = {}
                 for req in unresolved_reqs:
-                    clean_label = re.sub(r"(?i)pqc|\(alternative.*?\)|§\w+", "", req.get('label', '')).strip()
+                    clean_label = re.sub(r"(?i)\(alternative.*?\)", "", req.get('label', '')).strip()
                     query = f"{clean_label} {req.get('threshold', '')} {req.get('unit', '')}"
                     docs = vs.similarity_search(query, k=3)
                     for d in docs:
@@ -1402,6 +1403,23 @@ class RAGAuditEngine(AuditEngine):
                                 snippet = text[start:end].replace('\n', ' ')
                                 return val[:60], f"...{snippet}...", f"{filename} (Page {i+1})"
                     except re.error: pass
+
+                    # ultimate presence fallback (for tables without colons or weirdly formatted units like '1920 x 1080')
+                    # if the label AND the numeric parts of the required value are within an 80 char window, it's a match!
+                    req_nums = re.findall(r"\d+", str(req_val))
+                    if req_nums:
+                        try:
+                            # Just search for the label and see if the numbers are nearby
+                            window_pat = rf"(?i){kv}[\s\S]{{0,80}}"
+                            m = re.search(window_pat, text)
+                            if m:
+                                window = m.group(0).lower()
+                                if all(num in window for num in req_nums):
+                                    start = max(0, m.start() - 150)
+                                    end = min(len(text), m.end() + 150)
+                                    snippet = text[start:end].replace('\n', ' ')
+                                    return str(req_val), f"...{snippet}...", f"{filename} (Page {i+1})"
+                        except re.error: pass
 
         return None, "", ""
 
@@ -2598,20 +2616,17 @@ def show_double_confirm_dialog(vendor_name: str, r: VendorResult, title: str, fi
     if found_page == -1 and pages:
         found_page = 0
             
-    if found_page >= 0 and raw_bytes and HAS_PDFPLUMBER:
-        st.markdown(f"<div style='margin-top: 16px; margin-bottom: 8px; color: #38BDF8; font-weight: 600;'>Rendering Page {found_page + 1}...</div>", unsafe_allow_html=True)
+    if found_page >= 0 and raw_bytes:
+        import base64
+        st.markdown(f"<div style='margin-top: 16px; margin-bottom: 8px; color: #38BDF8; font-weight: 600;'>Rendering Original PDF (Scrolled to Page {found_page + 1})</div>", unsafe_allow_html=True)
         try:
-            with pdfplumber.open(io.BytesIO(raw_bytes)) as pdf:
-                page = pdf.pages[found_page]
-                im = page.to_image(resolution=200)
-                st.image(im.original, use_container_width=True)
-                del im
-            import gc
-            gc.collect()
+            b64_pdf = base64.b64encode(raw_bytes).decode('utf-8')
+            pdf_display = f'<iframe src="data:application/pdf;base64,{b64_pdf}#page={found_page + 1}" width="100%" height="700px" style="border: none; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);"></iframe>'
+            st.markdown(pdf_display, unsafe_allow_html=True)
         except Exception as e:
-            st.error(f"Failed to render page image: {e}")
+            st.error(f"Failed to embed PDF: {e}")
     else:
-        st.warning("Could not locate the snippet on a specific page, or PDF rendering is not available.")
+        st.warning("Could not locate the snippet on a specific page, or raw PDF bytes are missing.")
 def render_sidebar() -> bool:
     ss = st.session_state
     logo_b64 = get_base64_image("logo.jpg")
