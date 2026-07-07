@@ -590,7 +590,7 @@ class AuditEngine:
             self._create_vectorstore(combined_text, "vendor_pqc")
 
         # 2-6. Run all deep extractions in parallel!
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             future_make = executor.submit(self.extract_make_and_model, combined_text)
             future_maf = executor.submit(self.validate_maf, result.inventory, files, bid.get("tender_id", ""))
             future_pqc = executor.submit(self.evaluate_pqc, bid.get("pqc", []), combined_text)
@@ -780,31 +780,67 @@ class RAGAuditEngine(AuditEngine):
         
         import os
         
-        # 1. Initialize the LLM Engine (Fast, cloud-based or local)
+        self._llm_pool = []
+        self._llm_smart_pool = []
+        self._llm_index = 0
+        self._llm_smart_index = 0
+        import threading
+        self._lock = threading.Lock()
+        
+        # 1. Initialize the LLM Engine (Load Balanced)
         try:
-            groq_key = os.environ.get("GROQ_API_KEY")
-            if not groq_key:
-                try:
-                    groq_key = st.secrets.get("GROQ_API_KEY")
-                except Exception:
-                    pass
+            keys_to_try = []
             
-            if groq_key:
+            for k, v in os.environ.items():
+                if k.startswith("GROQ_API_KEY") and v and v not in keys_to_try:
+                    keys_to_try.append(v)
+                    
+            try:
+                for k in st.secrets:
+                    if k.startswith("GROQ_API_KEY"):
+                        val = st.secrets.get(k)
+                        if val and val not in keys_to_try:
+                            keys_to_try.append(val)
+            except Exception:
+                pass
+                
+            final_keys = []
+            for k in keys_to_try:
+                if "," in k:
+                    final_keys.extend([x.strip() for x in k.split(",") if x.strip()])
+                else:
+                    if k.strip() not in final_keys: final_keys.append(k.strip())
+                    
+            if final_keys:
                 try:
                     from langchain_groq import ChatGroq
-                    self.llm = ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=groq_key, temperature=0.0, max_retries=0, timeout=120)
-                    self.llm_smart = ChatGroq(model_name="llama-3.3-70b-versatile", groq_api_key=groq_key, temperature=0.0, max_retries=0, timeout=120)
+                    for key in final_keys:
+                        self._llm_pool.append(ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=key, temperature=0.0, max_retries=0, timeout=120))
+                        self._llm_smart_pool.append(ChatGroq(model_name="llama-3.3-70b-versatile", groq_api_key=key, temperature=0.0, max_retries=0, timeout=120))
                 except ImportError:
-                    from langchain_community.llms import Ollama
-                    self.llm = Ollama(model=self.model_name, temperature=0.0)
-                    self.llm_smart = self.llm
-            else:
-                # No API key found: fallback to completely local, air-gapped Ollama model
+                    pass
+                    
+            if not self._llm_pool:
                 from langchain_community.llms import Ollama
-                self.llm = Ollama(model=self.model_name, temperature=0.0)
-                self.llm_smart = self.llm
+                fallback = Ollama(model=self.model_name, temperature=0.0)
+                self._llm_pool.append(fallback)
+                self._llm_smart_pool.append(fallback)
         except ImportError:
             pass
+
+    @property
+    def llm(self):
+        if not self._llm_pool: return None
+        with self._lock:
+            self._llm_index = (self._llm_index + 1) % len(self._llm_pool)
+            return self._llm_pool[self._llm_index]
+
+    @property
+    def llm_smart(self):
+        if not self._llm_smart_pool: return None
+        with self._lock:
+            self._llm_smart_index = (self._llm_smart_index + 1) % len(self._llm_smart_pool)
+            return self._llm_smart_pool[self._llm_smart_index]
             
         # 2. Initialize the Vector Store (Heavy, might be missing on Render)
         try:
@@ -828,7 +864,7 @@ class RAGAuditEngine(AuditEngine):
         return vectorstore
 
     def _create_multi_vectorstore(self, files: Dict[str, str], store_id: str):
-        real_id = f"{store_id}_{hash(tuple(files.keys()))}"
+        real_id = f"{store_id}_{hash(tuple(files.values()))}"
         if real_id in self.vectorstores: return self.vectorstores[real_id]
         if not getattr(self, "embeddings", None) or not getattr(self, "Chroma", None): return None
         chunks = []
@@ -1161,13 +1197,17 @@ class RAGAuditEngine(AuditEngine):
         from langchain_core.output_parsers import StrOutputParser
 
         vs = self._create_vectorstore(vendor_text, "temp_vendor_search")
+        
+        unique_chunks = {}
         if vs:
-            combined_query = ' '.join(f"{s.get('label', '')} {s.get('param', '')}" for s in specs)
-            docs = vs.similarity_search(combined_query, k=6)
-            unique_chunks = {d.page_content: True for d in docs}
-            context = "\n\n".join(unique_chunks.keys())[:6000]
+            for s in specs:
+                query = f"{s.get('label', '')} {s.get('param', '')}"
+                docs = vs.similarity_search(query, k=2)
+                for d in docs:
+                    unique_chunks[d.page_content] = True
+            context = "\n\n".join(unique_chunks.keys())[:10000]
         else:
-            context = vendor_text[:6000]
+            context = vendor_text[:12000]
 
         prompt = PromptTemplate(
             input_variables=["specs", "context"],
@@ -1861,7 +1901,7 @@ def save_state_to_disk() -> None:
         err_str = traceback.format_exc()
         with open("error_log.txt", "w") as f:
             f.write(err_str)
-        st.error(f"Cache Save Error: {err_str}")
+        
 
 def load_state_from_disk() -> bool:
     ss = st.session_state
