@@ -589,30 +589,27 @@ class AuditEngine:
             self._create_vectorstore(combined_text, "temp_vendor_search")
             self._create_vectorstore(combined_text, "vendor_pqc")
 
-        # 2-6. Run all deep extractions in parallel!
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        # 2-6. Run extractions — non-LLM tasks in parallel, LLM tasks sequential
+        # Running LLM tasks in parallel on a 6,000 TPM free tier blows the limit
+        # instantly (4 parallel threads × 1500 tokens = 6000 tokens in one second).
+        # Non-LLM tasks (MAF heuristic, deviations, classify) are still parallelised.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
             future_make = executor.submit(self.extract_make_and_model, combined_text)
-            future_maf = executor.submit(self.validate_maf, result.inventory, files, bid.get("tender_id", ""))
-            future_pqc = executor.submit(self.evaluate_pqc, bid.get("pqc", []), combined_text)
-            future_missing = executor.submit(self.check_missing_docs, bid.get("mandatory_docs", []), combined_text, result.inventory)
-            future_dev = executor.submit(self.detect_deviations, combined_text)
-            
-            def batch_list(lst, n):
-                for i in range(0, len(lst), n): yield lst[i:i + n]
-                
-            future_mand_specs = [executor.submit(self.extract_specs_batch, b, combined_text, True) for b in batch_list(bid.get("mandatory_specs", []), 10)]
-            future_pref_specs = [executor.submit(self.extract_specs_batch, b, combined_text, False) for b in batch_list(bid.get("preferred_specs", []), 10)]
-            
-            result.make_and_model = future_make.result()
-            result.maf = future_maf.result()
-            result.pqc = future_pqc.result()
-            result.missing_documents = future_missing.result()
-            result.deviations = future_dev.result()
-            
-            for f in future_mand_specs:
-                result.mandatory_specs.extend(f.result())
-            for f in future_pref_specs:
-                result.preferred_specs.extend(f.result())
+            future_maf  = executor.submit(self.validate_maf, result.inventory, files, bid.get("tender_id", ""))
+            future_dev  = executor.submit(self.detect_deviations, combined_text)
+            result.make_and_model   = future_make.result()
+            result.maf              = future_maf.result()
+            result.deviations       = future_dev.result()
+
+        # LLM-backed tasks run sequentially so they share the TPM bucket fairly.
+        # Each uses regex-first logic, so most complete with 0–200 tokens total.
+        result.pqc              = self.evaluate_pqc(bid.get("pqc", []), combined_text)
+        result.missing_documents = self.check_missing_docs(
+            bid.get("mandatory_docs", []), combined_text, result.inventory)
+        result.mandatory_specs  = self.extract_specs_batch(
+            bid.get("mandatory_specs", []), combined_text, True)
+        result.preferred_specs  = self.extract_specs_batch(
+            bid.get("preferred_specs", []), combined_text, False)
 
         # 7. Disqualification gate (binary, eligibility-level)
         self._apply_disqualification_gate(result, bid)
@@ -773,73 +770,38 @@ class RAGAuditEngine(AuditEngine):
     def __init__(self, model_name: str = "llama3"):
         super().__init__()
         self.model_name = model_name
+        self.llm = None
         self.embeddings = None
         self.vectorstores = {}
         self.text_splitter = None
         
         import os
         
-        self._llm_pool = []
-        self._llm_smart_pool = []
-        self._llm_index = 0
-        self._llm_smart_index = 0
-        import threading
-        self._lock = threading.Lock()
-        
-        # 1. Initialize the LLM Engine (Load Balanced)
+        # 1. Initialize the LLM Engine (Fast, cloud-based or local)
         try:
-            keys_to_try = []
+            groq_key = os.environ.get("GROQ_API_KEY")
+            if not groq_key:
+                try:
+                    groq_key = st.secrets.get("GROQ_API_KEY")
+                except Exception:
+                    pass
             
-            for k, v in os.environ.items():
-                if k.startswith("GROQ_API_KEY") and v and v not in keys_to_try:
-                    keys_to_try.append(v)
-                    
-            try:
-                for k in st.secrets:
-                    if k.startswith("GROQ_API_KEY"):
-                        val = st.secrets.get(k)
-                        if val and val not in keys_to_try:
-                            keys_to_try.append(val)
-            except Exception:
-                pass
-                
-            final_keys = []
-            for k in keys_to_try:
-                if "," in k:
-                    final_keys.extend([x.strip() for x in k.split(",") if x.strip()])
-                else:
-                    if k.strip() not in final_keys: final_keys.append(k.strip())
-                    
-            if final_keys:
+            if groq_key:
                 try:
                     from langchain_groq import ChatGroq
-                    for key in final_keys:
-                        self._llm_pool.append(ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=key, temperature=0.0, max_retries=0, timeout=120))
-                        self._llm_smart_pool.append(ChatGroq(model_name="llama-3.3-70b-versatile", groq_api_key=key, temperature=0.0, max_retries=0, timeout=120))
+                    self.llm = ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=groq_key, temperature=0.0, max_retries=0, timeout=120)
+                    self.llm_smart = ChatGroq(model_name="llama-3.3-70b-versatile", groq_api_key=groq_key, temperature=0.0, max_retries=0, timeout=120)
                 except ImportError:
-                    pass
-                    
-            if not self._llm_pool:
+                    from langchain_community.llms import Ollama
+                    self.llm = Ollama(model=self.model_name, temperature=0.0)
+                    self.llm_smart = self.llm
+            else:
+                # No API key found: fallback to completely local, air-gapped Ollama model
                 from langchain_community.llms import Ollama
-                fallback = Ollama(model=self.model_name, temperature=0.0)
-                self._llm_pool.append(fallback)
-                self._llm_smart_pool.append(fallback)
+                self.llm = Ollama(model=self.model_name, temperature=0.0)
+                self.llm_smart = self.llm
         except ImportError:
             pass
-
-    @property
-    def llm(self):
-        if not self._llm_pool: return None
-        with self._lock:
-            self._llm_index = (self._llm_index + 1) % len(self._llm_pool)
-            return self._llm_pool[self._llm_index]
-
-    @property
-    def llm_smart(self):
-        if not self._llm_smart_pool: return None
-        with self._lock:
-            self._llm_smart_index = (self._llm_smart_index + 1) % len(self._llm_smart_pool)
-            return self._llm_smart_pool[self._llm_smart_index]
             
         # 2. Initialize the Vector Store (Heavy, might be missing on Render)
         try:
@@ -863,7 +825,7 @@ class RAGAuditEngine(AuditEngine):
         return vectorstore
 
     def _create_multi_vectorstore(self, files: Dict[str, str], store_id: str):
-        real_id = f"{store_id}_{hash(tuple(files.values()))}"
+        real_id = f"{store_id}_{hash(tuple(files.keys()))}"
         if real_id in self.vectorstores: return self.vectorstores[real_id]
         if not getattr(self, "embeddings", None) or not getattr(self, "Chroma", None): return None
         chunks = []
@@ -1012,30 +974,171 @@ class RAGAuditEngine(AuditEngine):
                     time.sleep(min(2 ** attempt, 8))
         return MAFResult(status=MAF_INVALID, evidence="Failed to evaluate MAF: Persistent LLM failure.", source_file="")
 
-    def evaluate_pqc(self, pqc_reqs: List[Dict[str, Any]], vendor_text: str) -> List[PQCResult]:
-        if not self.llm or not pqc_reqs: return []
-        context = vendor_text[:6000]
-        specs_json = json.dumps(pqc_reqs)
-        prompt = f"""Check if vendor meets ALL pre-qualification criteria.
-        Criteria (JSON): {specs_json}
-        Vendor text: {context}
-        Return ONLY a JSON array — one object per criterion in the exact same order:
-        [{{"label":"...","provided_value":"...","meets_threshold":true/false}}]
-        """
-        import time
-        for attempt in range(4):
+    @staticmethod
+    def _regex_extract_pqc(label: str, threshold: Any, unit: str, vendor_text: str) -> Optional[str]:
+        """Extract a PQC value from vendor text using regex. Returns value string or None."""
+        text = vendor_text
+        label_lower = label.lower()
+        label_words = re.sub(r"[^a-z0-9 ]", " ", label_lower).split()
+
+        # Patterns targeting common PQC fields
+        pqc_patterns = {
+            "experience": [
+                r"(?i)(?:experience|established|operating|supplying|years? of)\D{0,40}?(\d+)\s*(?:\+\s*years?|years?)",
+                r"(?i)(\d+)\s*years?\s*(?:of|in)?\s*(?:experience|operation|business|supply)",
+            ],
+            "turnover": [
+                r"(?i)(?:annual\s*turnover|average\s*turnover|yearly\s*turnover|revenue)\D{0,40}?([\d,]+(?:\.\d+)?)\s*(?:crore|lakhs?|lakh|cr\.?|lac)",
+                r"(?i)turnover\s*[:\-]\s*(?:rs\.?\s*|inr\s*)?([\d,]+(?:\.\d+)?)\s*(?:crore|lakhs?|lakh|cr\.?)",
+                r"(?i)(?:rs\.?|inr)\s*([\d,]+(?:\.\d+)?)\s*(?:crore|lakhs?|lakh|cr\.?)",
+            ],
+            "order": [
+                # Extract order value in lakhs from order line
+                r"(?i)(?:order|supply|contract)\s*[:\-]?\s*.{0,60}?(?:inr|rs\.?)\s*([\d,]+(?:\.\d+)?)\s*(?:lakhs?|lakh|lac)",
+                r"(?i)(?:inr|rs\.?)\s*([\d,]+(?:\.\d+)?)\s*(?:lakhs?|lakh|lac)",
+                r"(?i)(?:successfully\s*)?(?:supplied|completed|executed|delivered)\D{0,40}?(\d+)\s*(?:similar\s*)?orders?",
+                r"(?i)(\d+)\s*(?:similar\s*)?orders?\s*(?:of|for|worth|valued)",
+            ],
+            "registration": [
+                r"(?i)(?:gem|gst|pan|msme|udyam|nsic)\s*(?:registration|reg\.?|no\.?|number|certificate)?\s*[:\-]?\s*([a-z0-9/\-]{5,30})",
+                r"(?i)registration\s*(?:no\.?|number)?\s*[:\-]\s*([a-z0-9/\-]{5,30})",
+            ],
+        }
+
+        # Match label to pattern category
+        category = None
+        for cat in pqc_patterns:
+            if cat in label_lower or any(w in label_lower for w in cat.split()):
+                category = cat
+                break
+
+        if category and category in pqc_patterns:
+            for pat in pqc_patterns[category]:
+                m = re.search(pat, text)
+                if m:
+                    val = m.group(1).strip().strip(",.:;") if m.lastindex else m.group(0).strip()[:60]
+                    if val:
+                        # Annotate with unit for readability
+                        if category == "experience":
+                            return f"{val} years"
+                        if category == "turnover":
+                            # detect unit from context
+                            unit_m = re.search(r"(?i)(crore|lakhs?|lakh)", m.group(0))
+                            sfx = unit_m.group(1).capitalize() if unit_m else unit
+                            return f"INR {val} {sfx}"
+                        if category == "order":
+                            return f"{val} orders" if val.isdigit() else val
+                        return val
+
+        # Generic number extraction using label keywords
+        kw_pat = r"\b" + r"\s*".join(re.escape(w) for w in label_words[:3]) + r"\b"
+        try:
+            generic = rf"(?i){kw_pat}[\s\S]{{0,120}}?([\d][\d,./\- ]*(?:years?|orders?|lakhs?|crore|cr\.?|inr|rs\.?)?)"
+            m = re.search(generic, text)
+            if m:
+                return m.group(1).strip().strip(",.:;")[:60]
+        except re.error:
+            pass
+
+        return None
+
+    @staticmethod
+    def _regex_judge_pqc(provided: str, threshold: Any, unit: str) -> bool:
+        """Return True if vendor's provided value meets the threshold."""
+        if not provided or provided in ("[NOT FOUND]", "[DATA LACKING]"):
+            return False
+        prov_lower = provided.lower()
+
+        if threshold is None:
+            # Presence-only requirement
+            return bool(provided and len(provided) > 2)
+
+        # Numeric threshold comparison
+        req_nums = re.findall(r"[\d]+(?:[.,]\d+)?", str(threshold))
+        prov_nums = re.findall(r"[\d]+(?:[.,]\d+)?", prov_lower.replace(",", ""))
+        if req_nums and prov_nums:
             try:
-                resp = self.llm.invoke(prompt).content
-                data = self._extract_json(resp, expected_type=list)
-                results = []
-                for req, item in zip(pqc_reqs, data):
-                    req_val = f"≥ {req.get('threshold')} {req.get('unit','')}" if req.get('threshold') else "Required"
-                    results.append(PQCResult(req['label'], req_val, item.get('provided_value','[NOT FOUND]'), item.get('meets_threshold', False), req.get('section','')))
-                return results
-            except Exception as e:
-                wait = min(2 ** attempt, 8)
-                time.sleep(wait)
-        return []
+                req_num = float(req_nums[0].replace(",", ""))
+                prov_num = float(prov_nums[0].replace(",", ""))
+                return prov_num >= req_num
+            except ValueError:
+                pass
+
+        return False
+
+    def evaluate_pqc(self, pqc_reqs: List[Dict[str, Any]], vendor_text: str) -> List[PQCResult]:
+        """
+        Regex-first PQC evaluation — extracts experience, turnover, order counts and
+        registrations directly from vendor text without any LLM tokens.
+        Only falls back to LLM for criteria the regex engine cannot resolve.
+        """
+        if not pqc_reqs:
+            return []
+
+        results: List[Optional[PQCResult]] = [None] * len(pqc_reqs)
+        unresolved: List[int] = []
+
+        # ── PASS 1: regex ────────────────────────────────────────────
+        for i, req in enumerate(pqc_reqs):
+            label = req.get("label", "")
+            threshold = req.get("threshold")
+            unit = req.get("unit", "")
+            section = req.get("section", "")
+            req_val = f"≥ {threshold} {unit}".strip() if threshold is not None else "Required"
+
+            provided = self._regex_extract_pqc(label, threshold, unit, vendor_text)
+            if provided:
+                passed = self._regex_judge_pqc(provided, threshold, unit)
+                results[i] = PQCResult(label, req_val, provided, passed, section)
+            else:
+                unresolved.append(i)
+
+        # ── PASS 2: LLM for unresolved PQC only ─────────────────────
+        if unresolved and self.llm:
+            unresolved_reqs = [pqc_reqs[i] for i in unresolved]
+            context = vendor_text[:4000]
+            specs_json = json.dumps(unresolved_reqs)
+            prompt = (
+                "Check if the vendor meets these pre-qualification criteria.\n"
+                f"Criteria: {specs_json}\n"
+                f"Vendor text:\n{context}\n"
+                "Return ONLY a JSON array in the same order:\n"
+                "[{\"label\":\"...\",\"provided_value\":\"...\",\"meets_threshold\":true/false}]"
+            )
+            for attempt in range(3):
+                try:
+                    resp = self.llm.invoke(prompt).content
+                    data = self._extract_json(resp, expected_type=list)
+                    if not isinstance(data, list):
+                        raise ValueError("Expected list")
+                    for i, (req, item) in zip(unresolved, zip(unresolved_reqs, data)):
+                        threshold = req.get("threshold")
+                        unit = req.get("unit", "")
+                        req_val = f"≥ {threshold} {unit}".strip() if threshold is not None else "Required"
+                        results[i] = PQCResult(
+                            req["label"], req_val,
+                            item.get("provided_value", "[NOT FOUND]"),
+                            item.get("meets_threshold", False),
+                            req.get("section", "")
+                        )
+                    break
+                except Exception as e:
+                    if "429" in str(e) or "RateLimit" in type(e).__name__:
+                        retry_match = re.search(r"try again in ([\d.]+)s", str(e))
+                        wait = float(retry_match.group(1)) + 1 if retry_match else min(2 ** (attempt + 1), 30)
+                        time.sleep(wait)
+                    else:
+                        time.sleep(3)
+
+        # ── Fill remaining None with NOT FOUND ────────────────────────
+        for i, req in enumerate(pqc_reqs):
+            if results[i] is None:
+                threshold = req.get("threshold")
+                unit = req.get("unit", "")
+                req_val = f"≥ {threshold} {unit}".strip() if threshold is not None else "Required"
+                results[i] = PQCResult(req["label"], req_val, "[NOT FOUND]", False, req.get("section", ""))
+
+        return results
 
     def check_missing_docs(self, mandatory_docs: List[str], vendor_text: str, inventory: List[InventoryItem]) -> List[str]:
         if not self.llm or not mandatory_docs: return []
@@ -1188,93 +1291,251 @@ class RAGAuditEngine(AuditEngine):
                 time.sleep(min(2 ** attempt, 8))
         return []
 
-    def extract_specs_batch(self, specs: List[Dict[str, Any]], vendor_text: str, mandatory: bool) -> List[SpecResult]:
-        if not self.llm or not specs: 
-            return [SpecResult(s.get("label", ""), str(s.get("required_value", "")), "[DATA LACKING]", "lacking", mandatory) for s in specs]
-            
-        from langchain_core.prompts import PromptTemplate
-        from langchain_core.output_parsers import StrOutputParser
+    # -----------------------------------------------------------------------
+    # REGEX-FIRST SPEC EXTRACTION — zero LLM tokens for most specs
+    # Only specs that the regex engine cannot find are sent to the LLM
+    # (in one single small call), keeping total token usage well under 6000 TPM.
+    # -----------------------------------------------------------------------
 
-        vs = self._create_vectorstore(vendor_text, "temp_vendor_search")
-        
-        unique_chunks = {}
-        if vs:
-            for s in specs:
-                query = f"{s.get('label', '')} {s.get('param', '')}"
-                docs = vs.similarity_search(query, k=2)
-                for d in docs:
-                    unique_chunks[d.page_content] = True
-            context = "\n\n".join(unique_chunks.keys())[:10000]
-        else:
-            context = vendor_text[:12000]
+    @staticmethod
+    def _regex_extract_spec(label: str, required_value: Any, unit: str, vendor_text: str) -> Optional[str]:
+        """Try to extract a spec value from vendor text using pure regex.
+        Returns the extracted string on success, or None if not found."""
+        text = vendor_text
+        label_lower = label.lower()
 
-        prompt = PromptTemplate(
-            input_variables=["specs", "context"],
-            template="""You are checking a vendor's technical submission against a list of required specifications.
-            Specifications to check:
-            {specs}
-            
-            Vendor Text Context:
-            {context}
-            
-            Determine if the vendor meets each specification based ONLY on the context.
-            Output ONLY the raw JSON array. DO NOT write a script. DO NOT write Python code. DO NOT write explanations.
-            Output JSON exactly like this, returning a list of objects in the same order:
-            [
-                {{
-                    "label": "The label of the spec from the input",
-                    "provided_value": "The value the vendor provided, or '[DATA LACKING]'",
-                    "status": "match" if they meet the spec, else "fail", else "lacking" if not found
-                }}
-            ]
-            """
-        )
-        chain = prompt | self.llm | StrOutputParser()
-        import time
-        import json
-        for attempt in range(6):
+        # ── numeric extraction ──────────────────────────────────────────
+        # Build keyword variants from the spec label
+        label_words = re.sub(r"[^a-z0-9 ]", " ", label_lower).split()
+        keyword_variants = [
+            re.escape(label.strip()),
+            re.escape(label_lower.strip()),
+            r"\b" + r"\s*".join(re.escape(w) for w in label_words[:4]) + r"\b",
+        ]
+
+        # Number + optional unit pattern
+        num_unit_pat = r"([\d][\d,./\-x× ]*(?:\s*(?:mm|cm|inch|nit|hz|khz|mhz|w|watt|v|vac|bit|k|°c|°f|%|rh|db|lux|lm|kg|g|m|cm|ms|fps|mbps|gbps|tb|gb|mb|px|lp/mm|cd/m2|:1|years?|months?|weeks?|days?|orders?|lakhs?|crore|usd|inr|rs\.?|nos?\.?|sets?|units?))+)"
+
+        for kv in keyword_variants:
             try:
-                specs_json = json.dumps([{"label": s.get("label", ""), "required_value": s.get("required_value", "")} for s in specs])
-                response = chain.invoke({"specs": specs_json, "context": context})
-                print(f"RAW LLM: {response}")
-                data_list = self._extract_json(response, expected_type=list)
-                
-                if not isinstance(data_list, list):
-                    raise ValueError("Expected JSON list")
-                
-                extracted_map = {item.get("label", ""): item for item in data_list if isinstance(item, dict)}
-                
-                results = []
-                for s in specs:
-                    label = s.get("label", "")
-                    req_val = str(s.get("required_value", "Required"))
-                    if "unit" in s: req_val += f" {s['unit']}"
-                    
-                    if label in extracted_map:
-                        ext = extracted_map[label]
-                        results.append(SpecResult(
+                # Priority: same-line colon/dash pattern (most precise — won't bleed into next row)
+                same_line = rf"(?im)^[^\n]*{kv}[^\n]*?[:\-]\s*({num_unit_pat})[^\n]*$"
+                m = re.search(same_line, text)
+                if m:
+                    val = m.group(1).strip().strip(",.:;")
+                    if val and len(val) < 60:
+                        return val
+            except re.error:
+                pass
+
+        for kv in keyword_variants:
+            try:
+                # Fallback: label ... value within 80 chars (allows table layout)
+                pat = rf"(?i){kv}[\s\S]{{0,80}}?{num_unit_pat}"
+                m = re.search(pat, text)
+                if m:
+                    val = m.group(1).strip().strip(",.:;")
+                    if val and len(val) < 60:
+                        return val
+            except re.error:
+                pass
+
+        # ── boolean / presence detection ──────────────────────────────
+        bool_keywords = ["built-in", "built in", "provided", "yes", "available",
+                         "supported", "included", "present", "integrated", "true"]
+        req_str = str(required_value).lower()
+        if req_str in ("true", "yes", "required", "built-in", "built in"):
+            for kv in keyword_variants:
+                try:
+                    window_pat = rf"(?i){kv}[\s\S]{{0,80}}"
+                    m = re.search(window_pat, text)
+                    if m:
+                        window = m.group(0).lower()
+                        if any(bk in window for bk in bool_keywords):
+                            return "Provided"
+                except re.error:
+                    pass
+
+        # ── table / colon pattern ─────────────────────────────────────
+        # Handles "Pixel Pitch : 1.5 mm" or "Pixel Pitch | 1.5 mm"
+        for kv in keyword_variants:
+            try:
+                pat = rf"(?i){kv}\s*[:|→\-–]\s*(.{{1,80}}?)(?:\n|$|;)"
+                m = re.search(pat, text)
+                if m:
+                    val = m.group(1).strip().strip(",.:;")
+                    if val and len(val) < 80:
+                        return val
+            except re.error:
+                pass
+
+        # ── free-text / make-model extraction ─────────────────────────
+        # For specs like "Make & Model", "OS", "Diode Type" — grab the
+        # full value after the colon/label on the same line
+        for kv in keyword_variants:
+            try:
+                pat = rf"(?i){kv}\s*[:\-]?\s*(.{{3,60}})(?:\n|$)"
+                m = re.search(pat, text)
+                if m:
+                    val = m.group(1).strip().strip(",.:;")
+                    # Reject if it looks like a number we already tried above
+                    if val and len(val) >= 3 and not val[0].isdigit():
+                        return val[:60]
+            except re.error:
+                pass
+
+        return None
+
+    @staticmethod
+    def _regex_judge_spec(provided: str, required_value: Any, unit: str) -> str:
+        """Return 'match' or 'fail' based on simple comparison of extracted value."""
+        if not provided or provided == "[DATA LACKING]":
+            return "lacking"
+        prov_lower = provided.lower()
+        req_str = str(required_value).lower().strip()
+
+        # Boolean / presence specs
+        if req_str in ("true", "yes", "required", "built-in", "built in", "provided"):
+            return "match" if any(w in prov_lower for w in
+                                  ["provided", "yes", "available", "supported",
+                                   "built-in", "built in", "included", "present", "true"]) else "fail"
+
+        # Try numeric comparison
+        req_nums = re.findall(r"[\d]+(?:[.,]\d+)?", req_str)
+        prov_nums = re.findall(r"[\d]+(?:[.,]\d+)?", prov_lower)
+        if req_nums and prov_nums:
+            try:
+                req_num = float(req_nums[0].replace(",", ""))
+                prov_num = float(prov_nums[0].replace(",", ""))
+                # "or Better" / "or Higher" → prov ≥ req
+                if any(x in req_str for x in ["or better", "or higher", "minimum", "min", "≥", ">="]):
+                    return "match" if prov_num >= req_num else "fail"
+                # tolerance / range specs (±)
+                if "±" in req_str or "+/-" in req_str:
+                    tol_nums = re.findall(r"[\d]+(?:[.,]\d+)?", req_str)
+                    if len(tol_nums) >= 2:
+                        center = float(tol_nums[0].replace(",", ""))
+                        tol = float(tol_nums[1].replace(",", ""))
+                        return "match" if abs(prov_num - center) <= tol else "fail"
+                # "or Less" / Max → prov ≤ req
+                if any(x in req_str for x in ["or less", "maximum", "max", "≤", "<="]):
+                    return "match" if prov_num <= req_num else "fail"
+                # Exact or close enough (within 5%)
+                return "match" if abs(prov_num - req_num) / max(req_num, 1) <= 0.05 else "fail"
+            except (ValueError, ZeroDivisionError):
+                pass
+
+        # Substring match as last resort
+        return "match" if req_str[:12] in prov_lower or prov_lower[:12] in req_str else "fail"
+
+    def extract_specs_batch(self, specs: List[Dict[str, Any]], vendor_text: str, mandatory: bool) -> List[SpecResult]:
+        """
+        Regex-first extraction — uses ZERO LLM tokens for specs it can find directly.
+        Only specs the regex engine cannot find are batched into ONE small LLM call.
+        This keeps total token usage well under the 6,000 TPM free-tier limit.
+        """
+        if not specs:
+            return []
+
+        results: List[Optional[SpecResult]] = [None] * len(specs)
+        unresolved_indices: List[int] = []
+
+        # ── PASS 1: regex extraction (no LLM, no tokens) ─────────────
+        for i, s in enumerate(specs):
+            label = s.get("label", "")
+            req_val = s.get("required_value", "")
+            unit = s.get("unit", "")
+            req_str = f"{req_val} {unit}".strip()
+
+            provided = self._regex_extract_spec(label, req_val, unit, vendor_text)
+            if provided:
+                status = self._regex_judge_spec(provided, req_val, unit)
+                results[i] = SpecResult(param=label, required=req_str, provided=provided,
+                                        status=status, mandatory=mandatory)
+            else:
+                unresolved_indices.append(i)
+
+        # ── PASS 2: LLM for unresolved specs only (one small call) ───
+        if unresolved_indices and self.llm:
+            unresolved_specs = [specs[i] for i in unresolved_indices]
+
+            # Get relevant context via vectorstore
+            vs = self._create_vectorstore(vendor_text, "temp_vendor_search")
+            if vs:
+                combined_query = " ".join(
+                    f"{s.get('label', '')} {s.get('param', '')}" for s in unresolved_specs
+                )
+                docs = vs.similarity_search(combined_query, k=4)
+                unique_chunks = {d.page_content: True for d in docs}
+                context = "\n\n".join(unique_chunks.keys())[:3000]
+            else:
+                context = vendor_text[:3000]
+
+            # Keep the prompt small — only send unresolved specs
+            specs_payload = json.dumps([
+                {"label": s.get("label", ""), "required_value": str(s.get("required_value", ""))}
+                for s in unresolved_specs
+            ])
+
+            prompt_text = (
+                "You are checking a vendor's technical submission. "
+                "For each spec below, find the vendor's stated value in the context. "
+                "If not found, use \"[DATA LACKING]\". "
+                "Output ONLY a raw JSON array, same order as input, no explanation:\n"
+                "[{\"label\":\"...\",\"provided_value\":\"...\","
+                "\"status\":\"match|fail|lacking\"}]\n\n"
+                f"Specs: {specs_payload}\n\nContext:\n{context}"
+            )
+
+            for attempt in range(4):
+                try:
+                    response = self.llm.invoke(prompt_text).content
+                    data_list = self._extract_json(response, expected_type=list)
+                    if not isinstance(data_list, list):
+                        raise ValueError("Expected JSON list")
+                    extracted_map = {
+                        item.get("label", ""): item
+                        for item in data_list if isinstance(item, dict)
+                    }
+                    for i, s in zip(unresolved_indices, unresolved_specs):
+                        label = s.get("label", "")
+                        req_val = s.get("required_value", "")
+                        unit = s.get("unit", "")
+                        req_str = f"{req_val} {unit}".strip()
+                        ext = extracted_map.get(label, {})
+                        results[i] = SpecResult(
                             param=label,
-                            required=req_val,
+                            required=req_str,
                             provided=ext.get("provided_value", "[DATA LACKING]"),
                             status=ext.get("status", "lacking"),
-                            mandatory=mandatory
-                        ))
+                            mandatory=mandatory,
+                        )
+                    break  # success — stop retrying
+                except Exception as e:
+                    print(f"LLM fallback attempt {attempt+1} failed: {e}")
+                    if "429" in str(e) or "RateLimit" in type(e).__name__:
+                        # Read the retry-after from the error message if present
+                        retry_match = re.search(r"try again in ([\d.]+)s", str(e))
+                        wait = float(retry_match.group(1)) + 1 if retry_match else min(2 ** (attempt + 1), 30)
+                        print(f"Rate limited — waiting {wait:.0f}s before retry")
+                        time.sleep(wait)
                     else:
-                        results.append(SpecResult(label, req_val, "[DATA LACKING]", "lacking", mandatory))
-                return results
-                
-            except Exception as e:
-                print(f"extract_specs_batch failed on attempt {attempt+1}: {e}")
-                if "429" in str(e) or "RateLimit" in type(e).__name__:
-                    time.sleep(min(2 ** attempt, 8))
-                else:
-                    time.sleep(5)
-                
-        results = []
-        for s in specs:
-            req_val = str(s.get("required_value", "Required"))
-            if "unit" in s: req_val += f" {s['unit']}"
-            results.append(SpecResult(s.get("label", ""), req_val, "[DATA LACKING]", "lacking", mandatory))
+                        time.sleep(3)
+
+        # ── Fill any remaining None slots with DATA LACKING ───────────
+        for i, s in enumerate(specs):
+            if results[i] is None:
+                req_val = s.get("required_value", "")
+                unit = s.get("unit", "")
+                req_str = f"{req_val} {unit}".strip()
+                results[i] = SpecResult(
+                    param=s.get("label", ""),
+                    required=req_str,
+                    provided="[DATA LACKING]",
+                    status="lacking",
+                    mandatory=mandatory,
+                )
+
         return results
 
     def narrate(self, bid: Dict[str, Any], results: List[VendorResult]) -> Optional[str]:
@@ -1900,7 +2161,7 @@ def save_state_to_disk() -> None:
         err_str = traceback.format_exc()
         with open("error_log.txt", "w") as f:
             f.write(err_str)
-        
+        st.error(f"Cache Save Error: {err_str}")
 
 def load_state_from_disk() -> bool:
     ss = st.session_state
@@ -4554,4 +4815,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
 
