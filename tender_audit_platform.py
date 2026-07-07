@@ -1052,15 +1052,20 @@ class RAGAuditEngine(AuditEngine):
             lbl_words = [w for w in clean_lbl.split() if len(w) >= 4][:2] # Top 2 significant words
             if not lbl_words: lbl_words = clean_lbl.split()[:2]
             
+            lbl_pat = "|".join(lbl_words)
+            
             for filename, pages in vendor_pages.items():
                 for i, page_text in enumerate(pages):
-                    pt_lower = page_text.lower()
-                    if all(num in pt_lower for num in req_nums):
-                        if all(w in pt_lower for w in lbl_words):
-                            start = max(0, pt_lower.find(req_nums[0]) - 150)
-                            end = min(len(page_text), pt_lower.find(req_nums[0]) + 150)
-                            snippet = page_text[start:end].replace('\n', ' ')
-                            return str(threshold), f"...{snippet}...", f"{filename} (Page {i+1})"
+                    try:
+                        window_pat = rf"(?i)({lbl_pat})[\s\S]{{0,250}}"
+                        for m in re.finditer(window_pat, page_text):
+                            window = m.group(0).lower()
+                            if all(num in window for num in req_nums):
+                                start = max(0, m.start() - 150)
+                                end = min(len(page_text), m.end() + 150)
+                                snippet = page_text[start:end].replace('\n', ' ')
+                                return str(threshold), f"...{snippet}...", f"{filename} (Page {i+1})"
+                    except re.error: pass
 
         return None, "", ""
 
@@ -2640,7 +2645,13 @@ def show_double_confirm_dialog(vendor_name: str, r: VendorResult, title: str, fi
         try:
             b64_pdf = base64.b64encode(raw_bytes).decode('utf-8')
             pdf_display = f'''
-            <iframe src="data:application/pdf;base64,{b64_pdf}#page={found_page + 1}" width="100%" height="700" type="application/pdf" style="border: none; border-radius: 8px; background: white;"></iframe>
+            <!DOCTYPE html>
+            <html>
+            <head><style>body {{ margin: 0; padding: 0; overflow: hidden; }}</style></head>
+            <body>
+            <embed src="data:application/pdf;base64,{b64_pdf}#page={found_page + 1}" width="100%" height="700px" type="application/pdf" />
+            </body>
+            </html>
             '''
             components.html(pdf_display, height=710)
         except Exception as e:
