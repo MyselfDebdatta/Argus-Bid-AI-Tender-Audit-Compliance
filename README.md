@@ -53,10 +53,10 @@ Argus Bid AI transforms procurement from a manual chore into an instant, determi
 - **Dynamic Multi-modal OCR:** Extracts text and tables effortlessly.
 
 ### 🧩 Core Product Modules
-- **Compliance Engine:** Evaluates PQC, MAFs, and Mandatory Documents based on extracted constraints.
+- **Compliance Engine:** Evaluates PQC, MAFs, and Mandatory Documents based on extracted constraints using a 100% deterministic token-overlap regex engine, completely eliminating AI hallucinations.
 - **Comparative Matrix:** Automatically generates side-by-side technical comparison tables for all responsive bidders.
 - **Interactive Dashboard:** A premium, glassmorphic UI for uploading documents, running audits, and viewing explainable results.
-- **Double-Confirm Verifiability:** A built-in "Human-in-the-Loop" modal allowing auditors to physically inspect the exact PDF snippets used by the AI to make a compliance decision.
+- **Double-Confirm Verifiability:** A built-in "Human-in-the-Loop" modal featuring a custom **client-side PDF.js rendering engine**. It natively renders multi-megabyte PDFs in the browser, instantly scrolling and highlighting the exact page used by the AI to make a compliance decision, without relying on unstable `iframe` data URIs.
 - **Exportable Reports:** Instantly export the entire dashboard analysis as a physical or PDF report for stakeholder review.
 
 ### 🤖 Dual-Model Hybrid RAG Engine
@@ -80,9 +80,10 @@ After the platform has mathematically ranked the vendors, it feeds the results i
 
 ## 🚀 What Is Implemented Today
 - Full document parsing using `pdfplumber` and `pypdf`.
-- Deterministic extraction of Pre-Qualification Criteria and Mandatory Documents.
+- Deterministic extraction of Pre-Qualification Criteria and Mandatory Documents using high-speed presence-based fallback engines.
 - Explainable AI (XAI) rationale generation for all vendor rankings and disqualifications.
 - Beautiful, highly responsive, and dynamic UI built with Streamlit and custom CSS/JS injections.
+- Robust, client-side PDF.js rendering bypassing all browser sandbox limitations for secure document inspection.
 - Seamless one-click deployment using Render Blueprints.
 
 ---
@@ -116,6 +117,8 @@ Argus-Bid-AI/
 ├── requirements.txt            # Python dependencies (LangChain, ChromaDB, etc.)
 ├── render.yaml                 # Render Blueprint for 1-click cloud deployment
 ├── run.bat                     # Windows startup script for local dev
+├── CODE_OF_CONDUCT.md          # Open Source contributor code of conduct
+├── LICENSE                     # MIT License
 ├── .gitignore                  # Ignored files, local caches, and environments
 └── README.md                   # Project documentation
 ```
