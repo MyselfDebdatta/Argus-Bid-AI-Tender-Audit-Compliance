@@ -1007,10 +1007,16 @@ class RAGAuditEngine(AuditEngine):
 
         # Match label to pattern category
         category = None
-        for cat in pqc_patterns:
-            if cat in label_lower or any(w in label_lower for w in cat.split()):
-                category = cat
-                break
+        unit_lower = str(unit).lower()
+        if "order" in unit_lower: category = "order"
+        elif "year" in unit_lower: category = "experience"
+        elif any(x in unit_lower for x in ["lakh", "crore", "cr", "rs", "inr"]): category = "turnover"
+        
+        if not category:
+            for cat in pqc_patterns:
+                if cat in label_lower or any(w in label_lower for w in cat.split()):
+                    category = cat
+                    break
 
         if category and category in pqc_patterns:
             for pat in pqc_patterns[category]:
@@ -1410,6 +1416,11 @@ class RAGAuditEngine(AuditEngine):
                 # "or Better" / "or Higher" → prov ≥ req
                 if any(x in req_str for x in ["or better", "or higher", "minimum", "min", "≥", ">="]):
                     return "match" if prov_num >= req_num else "fail"
+                # Range specs (e.g. 0-40)
+                if "-" in req_str and len(req_nums) >= 2 and req_str.find(req_nums[0]) < req_str.find("-") < req_str.find(req_nums[1]):
+                    min_val = float(req_nums[0].replace(",", ""))
+                    max_val = float(req_nums[1].replace(",", ""))
+                    return "match" if min_val <= prov_num <= max_val else "fail"
                 # tolerance / range specs (±)
                 if "±" in req_str or "+/-" in req_str:
                     tol_nums = re.findall(r"[\d]+(?:[.,]\d+)?", req_str)
@@ -1462,12 +1473,13 @@ class RAGAuditEngine(AuditEngine):
             # Get relevant context via vectorstore
             vs = self._create_vectorstore(vendor_text, "temp_vendor_search")
             if vs:
-                combined_query = " ".join(
-                    f"{s.get('label', '')} {s.get('param', '')}" for s in unresolved_specs
-                )
-                docs = vs.similarity_search(combined_query, k=4)
-                unique_chunks = {d.page_content: True for d in docs}
-                context = "\n\n".join(unique_chunks.keys())[:3000]
+                unique_chunks = {}
+                for s in unresolved_specs:
+                    query = f"{s.get('label', '')} {s.get('param', '')}"
+                    docs = vs.similarity_search(query, k=2)
+                    for d in docs:
+                        unique_chunks[d.page_content] = True
+                context = "\n\n".join(unique_chunks.keys())[:10000]
             else:
                 context = vendor_text[:3000]
 
