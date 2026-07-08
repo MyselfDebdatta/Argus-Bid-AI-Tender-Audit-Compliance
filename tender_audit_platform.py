@@ -1963,7 +1963,7 @@ html, body, [class*="css"]  { font-family:'Inter',system-ui,sans-serif; }
 [data-testid="stExpander"] details {
     background: rgba(30,41,59,0.3);
     border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 12px;
+    border-radius: 0px;
     transition: all 0.2s;
 }
 [data-testid="stExpander"] details:hover {
@@ -1978,7 +1978,8 @@ html, body, [class*="css"]  { font-family:'Inter',system-ui,sans-serif; }
     font-size: 15px; font-weight: 700; color: #E2E8F0; letter-spacing: 0.3px;
 }
 [data-testid="stExpander"] summary svg {
-    color: #60A5FA;
+    color: #10B981;
+    filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.6));
 }
 
 /* ---- status pills ---- */
@@ -4442,7 +4443,7 @@ def render_document_verification(results: List[VendorResult]) -> None:
     st.markdown("""
     <style>
     /* Expander UI Override */
-    div[data-testid="stExpander"] {
+    div[data-testid="stExpander"] details {
         border: 1px solid rgba(148, 163, 184, 0.15) !important;
         border-radius: 0px !important;
         background: rgba(15, 23, 42, 0.4) !important;
@@ -4553,7 +4554,7 @@ def render_drawers(results: List[VendorResult]) -> None:
     st.markdown("""
     <style>
     /* Expander UI Override */
-    div[data-testid="stExpander"] {
+    div[data-testid="stExpander"] details {
         border: 1px solid rgba(148, 163, 184, 0.15) !important;
         border-radius: 0px !important;
         background: rgba(15, 23, 42, 0.4) !important;
@@ -4627,10 +4628,11 @@ def render_drawers(results: List[VendorResult]) -> None:
     """, unsafe_allow_html=True)
     
     for r in ordered:
+        icon = ":material/cancel:" if r.disqualified else ":material/check_circle:"
         rank = f"Rank {r.rank} · " if r.rank else ""
         title = f"{r.name} — {rank}{r.status} · {r.score:g}%"
         
-        with st.expander(title):
+        with st.expander(title, icon=icon):
             st.markdown(render_inventory(r), unsafe_allow_html=True)
             st.markdown(render_maf(r), unsafe_allow_html=True)
             render_pqc_st(r)
