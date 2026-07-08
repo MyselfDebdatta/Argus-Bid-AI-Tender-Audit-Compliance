@@ -1888,7 +1888,7 @@ html, body, [class*="css"]  { font-family:'Inter',system-ui,sans-serif; }
 /* ---- section label ---- */
 .eyebrow { display:flex; align-items:center; gap:10px; margin:26px 0 12px; }
 .eyebrow .n { font-family:'JetBrains Mono',monospace; color:var(--blue);
-   font-size:12px; border:1px solid var(--line); border-radius:6px; padding:2px 8px; }
+   font-size:12px; border:1px solid var(--line); border-radius:0px; padding:2px 8px; }
 .eyebrow h2 { font-size:15px; font-weight:700; margin:0; letter-spacing:.2px; }
 .eyebrow .rule { flex:1; height:1px; background:var(--line); }
 
@@ -4627,9 +4627,8 @@ def render_drawers(results: List[VendorResult]) -> None:
     """, unsafe_allow_html=True)
     
     for r in ordered:
-        icon = '🔴' if r.disqualified else '🟢'
         rank = f"Rank {r.rank} · " if r.rank else ""
-        title = f"{icon} {r.name} — {rank}{r.status} · {r.score:g}%"
+        title = f"{r.name} — {rank}{r.status} · {r.score:g}%"
         
         with st.expander(title):
             st.markdown(render_inventory(r), unsafe_allow_html=True)
