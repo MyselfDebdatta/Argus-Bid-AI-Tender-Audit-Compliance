@@ -4476,7 +4476,7 @@ def render_document_verification(results: List[VendorResult]) -> None:
         border-radius: 2px !important;
         box-shadow: 0 0 10px rgba(56, 189, 248, 0.1) !important;
         text-transform: uppercase;
-        margin-top: -10px !important;
+        margin-top: -16px !important;
         transition: all 0.2s ease !important;
     }
     .verify-btn button:hover {
@@ -4491,6 +4491,7 @@ def render_document_verification(results: List[VendorResult]) -> None:
         display: flex;
         align-items: center;
         min-height: 40px;
+        line-height: 1;
     }
     .doc-name {
         font-weight: 600;
@@ -4504,6 +4505,8 @@ def render_document_verification(results: List[VendorResult]) -> None:
         font-size: 11px;
         text-transform: uppercase;
         letter-spacing: 1px;
+        line-height: 1;
+        display: inline-block;
     }
     .status-bad {
         font-weight: 700;
@@ -4512,6 +4515,8 @@ def render_document_verification(results: List[VendorResult]) -> None:
         font-size: 11px;
         text-transform: uppercase;
         letter-spacing: 1px;
+        line-height: 1;
+        display: inline-block;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -4587,7 +4592,7 @@ def render_drawers(results: List[VendorResult]) -> None:
         border-radius: 2px !important;
         box-shadow: 0 0 10px rgba(56, 189, 248, 0.1) !important;
         text-transform: uppercase;
-        margin-top: -10px !important;
+        margin-top: -16px !important;
         transition: all 0.2s ease !important;
     }
     .verify-btn button:hover {
@@ -4602,6 +4607,7 @@ def render_drawers(results: List[VendorResult]) -> None:
         display: flex;
         align-items: center;
         min-height: 40px;
+        line-height: 1;
     }
     .doc-name {
         font-weight: 600;
@@ -4615,6 +4621,8 @@ def render_drawers(results: List[VendorResult]) -> None:
         font-size: 11px;
         text-transform: uppercase;
         letter-spacing: 1px;
+        line-height: 1;
+        display: inline-block;
     }
     .status-bad {
         font-weight: 700;
@@ -4623,6 +4631,8 @@ def render_drawers(results: List[VendorResult]) -> None:
         font-size: 11px;
         text-transform: uppercase;
         letter-spacing: 1px;
+        line-height: 1;
+        display: inline-block;
     }
     </style>
     """, unsafe_allow_html=True)
