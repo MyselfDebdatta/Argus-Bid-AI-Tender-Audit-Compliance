@@ -35,6 +35,8 @@ import io
 import html
 import json
 import os
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
 import pickle
 import re
 import time
